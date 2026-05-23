@@ -260,14 +260,6 @@
         alert('Terjadi kesalahan saat menyambungkan ke Google Sheets.');
     }
 };
-            const handleUpdate = async (id, updatedData) => {
-    await fetch(`.../id/${id}`, { method: 'PUT', body: JSON.stringify(updatedData) });
-    
-    // Tunggu 500ms agar server SheetBest siap
-    setTimeout(async () => {
-        await fetchAllData();
-    }, 500);
-};
 
           const openVerifyModal = (spj) => { setSelectedSpj(spj); setVerdict('Siap Cair'); setNotes(''); setIsModalOpen(true); };
 
@@ -360,8 +352,7 @@
             setEditingSpj(null);
         } else {
             alert('Gagal! Cek konsol (tekan F12)');
-        }
-};
+        };
 
           const handleDragStart = (e, id) => { setDraggedId(id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id); };
           const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
