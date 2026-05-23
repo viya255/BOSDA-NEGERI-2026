@@ -259,6 +259,32 @@
         alert('Terjadi kesalahan saat menyambungkan ke Google Sheets.');
     }
 };
+            // Fungsi untuk memindahkan data antar tab (sheet)
+const pindahkanSpj = async (item, keTab) => {
+    const BASE_URL = 'https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630';
+
+    try {
+        // 1. Tambah data ke sheet tujuan (misal: /tabs/Revisi)
+        await fetch(`${BASE_URL}/tabs/${keTab}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(item),
+        });
+
+        // 2. Hapus data dari sheet utama
+        // Kita cari barisnya berdasarkan ID
+        await fetch(`${BASE_URL}/id/${item.id}`, {
+            method: 'DELETE',
+        });
+
+        alert(`Berhasil dipindahkan ke ${keTab}!`);
+        // Refresh data di layar (tambahkan fungsi untuk ambil ulang data nanti)
+        window.location.reload(); 
+    } catch (error) {
+        console.error("Error:", error);
+        alert("Gagal memindahkan data.");
+    }
+};
 
           const openVerifyModal = (spj) => { setSelectedSpj(spj); setVerdict('Siap Cair'); setNotes(''); setIsModalOpen(true); };
 
@@ -490,6 +516,25 @@
                                 <button onClick={() => handleOpenEdit(spj)} className="bg-amber-50 text-amber-600 hover:bg-amber-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconEdit size={14} className="mr-1 hidden sm:block"/> Edit</button>
                                 <button onClick={() => handleDeleteSpj(spj.id)} className="bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconTrash size={14} className="mr-1 hidden sm:block"/> Hapus</button>
                             </div>
+                        <div className="flex justify-end space-x-1.5 flex-wrap gap-y-1">
+    {/* TAMBAHKAN TOMBOL INI */}
+    <button 
+        onClick={() => pindahkanSpj(spj, 'Revisi')} 
+        className="bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1 rounded text-xs font-bold"
+    >
+        Revisi
+    </button>
+    <button 
+        onClick={() => pindahkanSpj(spj, 'SiapCair')} 
+        className="bg-green-50 text-green-600 hover:bg-green-100 px-2 py-1 rounded text-xs font-bold"
+    >
+        Cairkan
+    </button>
+    
+    {/* Tombol lama kamu tetap ada di sini */}
+    {showVerifyAction && <button onClick={() => openVerifyModal(spj)} ...>...</button>}
+    ...
+</div>
                         )}
                       </td>
                     </tr>
