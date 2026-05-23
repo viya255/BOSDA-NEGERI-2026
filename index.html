@@ -183,6 +183,7 @@
           const [activeTab, setActiveTab] = useState('dashboard');
           const [dataSpj, setDataSpj] = useState(initialData);
           const [isLoading, setIsLoading] = useState(false);
+          const [dataPagu, setDataPagu] = useState([]);
           
           const [addForm, setAddForm] = useState({
             kecamatan: '', sekolah: '', rincian: '', nominal: '', triwulan: 'Triwulan 1'
@@ -200,7 +201,16 @@
           
           // State baru untuk menyimpan PIC yang sedang login/memfilter
           const [aksesPic, setAksesPic] = useState('Semua');
-          
+
+            useEffect(() => {
+              fetch('https://api.sheetbest.com/sheets/cfa7def0-feb9-4828-bb0f-e237c95d4dc4')
+                .then((response) => response.json())
+                .then((data) => {
+                  console.log("Data Pagu Berhasil Dimuat:", data);
+                  setDataPagu(data);
+                })
+                .catch((error) => console.error("Gagal mengambil data pagu:", error));
+            }, []);
           const stats = {
             total: dataSpj.length,
             menunggu: dataSpj.filter(d => d.status === 'Menunggu Verifikasi').length,
