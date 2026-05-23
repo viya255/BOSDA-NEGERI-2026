@@ -234,6 +234,32 @@
         status: 'Menunggu Verifikasi',
         catatan: '-'
     };
+              const pindahkanData = async (item, tujuanSheet) => {
+    // GANTI URL DI BAWAH DENGAN URL SHEET "SIAP CAIR" DAN "REVISI" KAMU
+    const URL_SIAPCAIR = 'https://api.sheetbest.com/sheets/...URL_KAMU_UNTUK_SIAP_CAIR...';
+    const URL_REVISI = 'https://api.sheetbest.com/sheets/...URL_KAMU_UNTUK_REVISI...';
+    const URL_UTAMA = 'https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630';
+
+    const urlTujuan = tujuanSheet === 'siapCair' ? URL_SIAPCAIR : URL_REVISI;
+
+    try {
+        await fetch(urlTujuan, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(item),
+        });
+
+        await fetch(`${URL_UTAMA}/ID/${item.id}`, {
+            method: 'DELETE',
+        });
+
+        alert("Data berhasil dipindahkan!");
+        window.location.reload(); 
+    } catch (error) {
+        console.error("Error:", error);
+        alert("Gagal memindahkan data.");
+    }
+  };
 
     try {
         // 2. Kirim data ke Google Sheets via SheetBest
@@ -490,6 +516,19 @@
                                 <button onClick={() => handleOpenEdit(spj)} className="bg-amber-50 text-amber-600 hover:bg-amber-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconEdit size={14} className="mr-1 hidden sm:block"/> Edit</button>
                                 <button onClick={() => handleDeleteSpj(spj.id)} className="bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconTrash size={14} className="mr-1 hidden sm:block"/> Hapus</button>
                             </div>
+                        {/* TAMBAHKAN TOMBOL INI DI BAWAH TOMBOL HAPUS */}
+    <button 
+        onClick={() => pindahkanData(spj, 'SiapCair')} 
+        className="bg-green-50 text-green-600 hover:bg-green-100 px-2 py-1.5 rounded text-xs font-bold transition"
+    >
+        Cairkan
+    </button>
+    <button 
+        onClick={() => pindahkanData(spj, 'Revisi')} 
+        className="bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1.5 rounded text-xs font-bold transition"
+    >
+        Revisi
+    </button>
                         )}
                       </td>
                     </tr>
