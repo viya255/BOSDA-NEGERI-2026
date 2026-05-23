@@ -515,20 +515,19 @@
                                 {showVerifyAction && <button onClick={() => openVerifyModal(spj)} className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconClipboardCheck size={14} className="mr-1 hidden sm:block"/> Koreksi</button>}
                                 <button onClick={() => handleOpenEdit(spj)} className="bg-amber-50 text-amber-600 hover:bg-amber-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconEdit size={14} className="mr-1 hidden sm:block"/> Edit</button>
                                 <button onClick={() => handleDeleteSpj(spj.id)} className="bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconTrash size={14} className="mr-1 hidden sm:block"/> Hapus</button>
+                                <button 
+                                    onClick={() => pindahkanData(spj, 'SiapCair')} 
+                                    className="bg-green-50 text-green-600 hover:bg-green-100 px-2 py-1.5 rounded text-xs font-bold transition"
+                                    >
+                                    Cairkan
+                                </button>
+                                <button 
+                                    onClick={() => pindahkanData(spj, 'Revisi')} 
+                                    className="bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1.5 rounded text-xs font-bold transition"
+                                    >
+                                    Revisi
+                                </button>
                             </div>
-                        {/* TAMBAHKAN TOMBOL INI DI BAWAH TOMBOL HAPUS */}
-    <button 
-        onClick={() => pindahkanData(spj, 'SiapCair')} 
-        className="bg-green-50 text-green-600 hover:bg-green-100 px-2 py-1.5 rounded text-xs font-bold transition"
-    >
-        Cairkan
-    </button>
-    <button 
-        onClick={() => pindahkanData(spj, 'Revisi')} 
-        className="bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1.5 rounded text-xs font-bold transition"
-    >
-        Revisi
-    </button>
                         )}
                       </td>
                     </tr>
