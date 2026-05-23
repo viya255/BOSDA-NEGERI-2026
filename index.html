@@ -301,22 +301,49 @@
 
           const handleOpenEdit = (spj) => { setEditingSpj(spj); setIsEditModalOpen(true); };
 
-          const handleSaveEdit = (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const selectedKecamatan = formData.get('kecamatan');
-            const updatedData = dataSpj.map(spj => {
-              if (spj.id === editingSpj.id) {
-                return {
-                  ...spj, kecamatan: selectedKecamatan, pic: KECAMATAN_PIC[selectedKecamatan],
-                  sekolah: formData.get('sekolah'), triwulan: formData.get('triwulan'),
-                  nominal: Number(formData.get('nominal')), rincian: formData.get('rincian'),
-                };
-              }
-              return spj;
-            });
-            setDataSpj(updatedData); setIsEditModalOpen(false); setEditingSpj(null);
-          };
+          const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    
+    // Pastikan editingSpj ada
+    if (!editingSpj) return;
+
+    const formData = new FormData(e.target);
+    const selectedKecamatan = formData.get('kecamatan');
+    
+    const updatedDataPayload = {
+        kecamatan: selectedKecamatan,
+        pic: KECAMATAN_PIC[selectedKecamatan],
+        sekolah: formData.get('sekolah'),
+        triwulan: formData.get('triwulan'),
+        nominal: Number(formData.get('nominal')),
+        rincian: formData.get('rincian'),
+    };
+
+    try {
+        console.log("Mengirim data ke:", `https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/id/${editingSpj.id}`);
+        
+        const response = await fetch(`https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/id/${editingSpj.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedDataPayload),
+        });
+
+        if (response.ok) {
+            const updatedData = dataSpj.map(spj => 
+                spj.id === editingSpj.id ? { ...spj, ...updatedDataPayload } : spj
+            );
+            setDataSpj(updatedData);
+            setIsEditModalOpen(false);
+            setEditingSpj(null);
+            alert('Berhasil diperbarui!');
+        } else {
+            alert('Server menolak update. Cek konsol.');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Terjadi kesalahan.');
+    }
+};
 
           const handleDragStart = (e, id) => { setDraggedId(id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id); };
           const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
