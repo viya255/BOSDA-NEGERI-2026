@@ -323,17 +323,27 @@
     }
 };
 
-          const handleDeleteSpj = async (rowIndex) => {
-  if (window.confirm("Apakah Anda yakin ingin menghapus data ini?")) {
-    const response = await fetch(`https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/rows/${rowIndex}`, {
-      method: 'DELETE',
-    });
+          const handleDeleteSpj = async (id, rowIndex) => {
+    if (!window.confirm("Yakin ingin menghapus data ini?")) return;
 
-    if (response.ok) {
-      alert("Data berhasil dihapus dari Spreadsheet.");
-      fetchData(); // Refresh list agar data hilang dari tampilan
+    try {
+        // Coba gunakan rowIndex jika id gagal
+        const response = await fetch(`https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/rows/${rowIndex}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            // Hapus dari state lokal setelah berhasil di Sheets
+            setDataSpj(dataSpj.filter(spj => spj.id !== id));
+            alert("Data berhasil dihapus!");
+        } else {
+            const errorMsg = await response.text();
+            console.error("Gagal hapus:", errorMsg);
+            alert("Gagal menghapus: " + errorMsg);
+        }
+    } catch (err) {
+        console.error("Error:", err);
     }
-  }
 };
 
           const handleOpenEdit = (spj) => { setEditingSpj(spj); setIsEditModalOpen(true); };
@@ -341,26 +351,27 @@
           const handleSaveEdit = async (e) => {
     e.preventDefault();
     
-    // TAMBAHKAN INI UNTUK DEBUGGING:
-    console.log("Data yang dikirim ke API:", editingSpj); 
-    
+    // Pastikan rowIndex tersedia
+    if (!editingSpj.rowIndex) {
+        alert("Error: Data tidak memiliki rowIndex. Tidak bisa menyimpan ke Spreadsheet.");
+        return;
+    }
+
     try {
-        const response = await fetch(`https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/rows/${editingSpj.id}`, {
-            method: 'PUT', // atau 'PATCH'
+        const response = await fetch(`https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/rows/${editingSpj.rowIndex}`, {
+            method: 'PUT', // Menggunakan PUT untuk overwrite satu baris
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(editingSpj),
         });
-        
-        // Cek apakah server mengembalikan pesan error
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error("Error dari API:", errorText);
-            alert("Gagal simpan! Cek konsol (F12) untuk detail error.");
+
+        if (response.ok) {
+            alert("Data berhasil tersimpan!");
+            window.location.reload(); // Refresh untuk memastikan data sinkron
         } else {
-            alert("Berhasil!");
+            console.error("Gagal simpan:", await response.text());
         }
     } catch (err) {
-        console.error("Error koneksi:", err);
+        console.error("Error:", err);
     }
 };
 
