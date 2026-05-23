@@ -323,33 +323,44 @@
     }
 };
 
-          const handleDeleteSpj = (id) => {
-            if (window.confirm('Hapus data SPJ ini secara permanen?')) setDataSpj(dataSpj.filter(spj => spj.id !== id));
-          };
+          const handleDeleteSpj = async (rowIndex) => {
+  if (window.confirm("Apakah Anda yakin ingin menghapus data ini?")) {
+    const response = await fetch(`https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/rows/${rowIndex}`, {
+      method: 'DELETE',
+    });
+
+    if (response.ok) {
+      alert("Data berhasil dihapus dari Spreadsheet.");
+      fetchData(); // Refresh list agar data hilang dari tampilan
+    }
+  }
+};
 
           const handleOpenEdit = (spj) => { setEditingSpj(spj); setIsEditModalOpen(true); };
 
           const handleSaveEdit = async (e) => {
     e.preventDefault();
-              // TAMBAHKAN INI UNTUK DEBUGGING:
-    console.log("Data yang dikirim ke API:", editingSpj);
-
-    // 1. Kirim perubahan ke Spreadsheet
+    
+    // TAMBAHKAN INI UNTUK DEBUGGING:
+    console.log("Data yang dikirim ke API:", editingSpj); 
+    
     try {
-        const response = await fetch(`https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/id/${editingSpj.id}`, {
-            method: 'PUT',
+        const response = await fetch(`https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/rows/${editingSpj.id}`, {
+            method: 'PUT', // atau 'PATCH'
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(editingSpj), // Mengirim data yang sudah diedit
+            body: JSON.stringify(editingSpj),
         });
-
-        if (response.ok) {
-            // 2. Jika sukses ke Sheets, baru update state di layar
-            fetchData(); // Fungsi untuk mengambil ulang data terbaru
-            setIsEditModalOpen(false);
-            alert("Data berhasil tersimpan di Spreadsheet!");
+        
+        // Cek apakah server mengembalikan pesan error
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("Error dari API:", errorText);
+            alert("Gagal simpan! Cek konsol (F12) untuk detail error.");
+        } else {
+            alert("Berhasil!");
         }
-    } catch (error) {
-        alert("Gagal menyimpan ke Spreadsheet: " + error.message);
+    } catch (err) {
+        console.error("Error koneksi:", err);
     }
 };
 
