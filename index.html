@@ -295,9 +295,31 @@
     }
 };
 
-          const handleDeleteSpj = (id) => {
-            if (window.confirm('Hapus data SPJ ini secara permanen?')) setDataSpj(dataSpj.filter(spj => spj.id !== id));
-          };
+          const handleDeleteSpj = async (id) => {
+    if (!window.confirm('Yakin ingin hapus ID: ' + id + '?')) return;
+
+    try {
+        const url = `https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/id/${id}`;
+        console.log("Mencoba hapus ke URL:", url);
+
+        const response = await fetch(url, {
+            method: 'DELETE',
+        });
+
+        // Tampilkan respon dari server
+        const text = await response.text(); 
+        console.log("Respon server:", text);
+
+        if (response.ok) {
+            setDataSpj(prevData => prevData.filter(spj => spj.id !== id));
+            alert('Berhasil dihapus!');
+        } else {
+            alert('Gagal! Server bilang: ' + text);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+    }
+};
 
           const handleOpenEdit = (spj) => { setEditingSpj(spj); setIsEditModalOpen(true); };
 
