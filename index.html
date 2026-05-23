@@ -223,48 +223,17 @@
     e.preventDefault();
     
     // 1. Data yang mau dikirim
-   const newSpj = {
-    id: `SPJ-00${dataSpj.length + 1}`,
-    kecamatan: addForm.kecamatan,
-    sekolah: addForm.sekolah,
-    pic: KECAMATAN_PIC[addForm.kecamatan], // <--- TAMBAHKAN INI
-    tanggal: new Date().toISOString().split('T')[0],
-    triwulan: addForm.triwulan,
-    rincian: addForm.rincian,
-    nominal: Number(addForm.nominal),
-    status: 'Menunggu Verifikasi',
-    catatan: '-'
-};
-              const pindahkanData = async (item, tujuanSheet) => {
-    // Pastikan URL di bawah ini diapit tanda kutip satu (') yang utuh
-    // GANTI URL DI BAWAH SESUAI TAB DI GOOGLE SHEETS
-const URL_SIAPCAIR = 'https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/tabs/SiapCair';
-const URL_REVISI = 'https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/tabs/Revisi';
-const URL_UTAMA = 'https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630';
-
-// Perhatikan: tujuanSheet === 'siapCair' akan diarahkan ke URL_SIAPCAIR
-const urlTujuan = tujuanSheet === 'siapCair' ? URL_SIAPCAIR : URL_REVISI;
-
-    try {
-        // Kirim data ke sheet tujuan
-        await fetch(urlTujuan, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(item),
-        });
-
-        // Hapus data dari sheet utama
-        await fetch(`${URL_UTAMA}/ID/${item.ID}`, {
-            method: 'DELETE',
-        });
-
-        alert("Data berhasil dipindahkan!");
-        window.location.reload(); 
-    } catch (error) {
-        console.error("Error:", error);
-        alert("Gagal memindahkan data. Periksa URL API Anda.");
-    }
-  };
+    const newSpj = {
+        id: `SPJ-00${dataSpj.length + 1}`,
+        kecamatan: addForm.kecamatan,
+        sekolah: addForm.sekolah,
+        tanggal: new Date().toISOString().split('T')[0],
+        triwulan: addForm.triwulan,
+        rincian: addForm.rincian,
+        nominal: Number(addForm.nominal),
+        status: 'Menunggu Verifikasi',
+        catatan: '-'
+    };
 
     try {
         // 2. Kirim data ke Google Sheets via SheetBest
@@ -520,18 +489,6 @@ const urlTujuan = tujuanSheet === 'siapCair' ? URL_SIAPCAIR : URL_REVISI;
                                 {showVerifyAction && <button onClick={() => openVerifyModal(spj)} className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconClipboardCheck size={14} className="mr-1 hidden sm:block"/> Koreksi</button>}
                                 <button onClick={() => handleOpenEdit(spj)} className="bg-amber-50 text-amber-600 hover:bg-amber-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconEdit size={14} className="mr-1 hidden sm:block"/> Edit</button>
                                 <button onClick={() => handleDeleteSpj(spj.id)} className="bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconTrash size={14} className="mr-1 hidden sm:block"/> Hapus</button>
-                                <button 
-                                    onClick={() => pindahkanData(spj, 'SiapCair')} 
-                                    className="bg-green-50 text-green-600 hover:bg-green-100 px-2 py-1.5 rounded text-xs font-bold transition"
-                                    >
-                                    Cairkan
-                                </button>
-                                <button 
-                                    onClick={() => pindahkanData(spj, 'Revisi')} 
-                                    className="bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1.5 rounded text-xs font-bold transition"
-                                    >
-                                    Revisi
-                                </button>
                             </div>
                         )}
                       </td>
