@@ -352,7 +352,7 @@
             setEditingSpj(null);
         } else {
             alert('Gagal! Cek konsol (tekan F12)');
-        };
+        }
 
           const handleDragStart = (e, id) => { setDraggedId(id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id); };
           const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
