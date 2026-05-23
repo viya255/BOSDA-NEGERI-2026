@@ -223,18 +223,17 @@
     e.preventDefault();
     
     // 1. Data yang mau dikirim
-   const newSpj = {
-    id: `SPJ-00${dataSpj.length + 1}`,
-    kecamatan: addForm.kecamatan,
-    sekolah: addForm.sekolah,
-    pic: KECAMATAN_PIC[addForm.kecamatan], // <--- TAMBAHKAN INI
-    tanggal: new Date().toISOString().split('T')[0],
-    triwulan: addForm.triwulan,
-    rincian: addForm.rincian,
-    nominal: Number(addForm.nominal),
-    status: 'Menunggu Verifikasi',
-    catatan: '-'
-};
+    const newSpj = {
+        id: `SPJ-00${dataSpj.length + 1}`,
+        kecamatan: addForm.kecamatan,
+        sekolah: addForm.sekolah,
+        tanggal: new Date().toISOString().split('T')[0],
+        triwulan: addForm.triwulan,
+        rincian: addForm.rincian,
+        nominal: Number(addForm.nominal),
+        status: 'Menunggu Verifikasi',
+        catatan: '-'
+    };
 
     try {
         // 2. Kirim data ke Google Sheets via SheetBest
@@ -263,14 +262,37 @@
 
           const openVerifyModal = (spj) => { setSelectedSpj(spj); setVerdict('Siap Cair'); setNotes(''); setIsModalOpen(true); };
 
-          const submitVerification = () => {
-            const today = new Date().toISOString().split('T')[0];
-            const updatedData = dataSpj.map(spj => {
-              if (spj.id === selectedSpj.id) return { ...spj, status: verdict, catatan: verdict === 'Siap Cair' ? '' : notes, tanggal: today };
-              return spj;
-            });
-            setDataSpj(updatedData); setIsModalOpen(false);
-          };
+          const submitVerification = async () => {
+    const today = new Date().toISOString().split('T')[0];
+    
+    // 1. Update state lokal
+    const updatedData = dataSpj.map(spj => {
+        if (spj.id === selectedSpj.id) {
+            return { ...spj, status: verdict, catatan: verdict === 'Siap Cair' ? '' : notes, tanggal: today };
+        }
+        return spj;
+    });
+    setDataSpj(updatedData);
+    setIsModalOpen(false);
+
+    // 2. Kirim update ke Google Sheets (Asumsi menggunakan API SheetBest)
+    // SheetBest memerlukan ID untuk mencari baris yang ingin di-update
+    try {
+        await fetch(`https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/id/${selectedSpj.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                status: verdict,
+                catatan: verdict === 'Siap Cair' ? '' : notes,
+                tanggal: today
+            }),
+        });
+        alert('Status di Sheets berhasil diperbarui!');
+    } catch (error) {
+        console.error('Gagal update Sheets:', error);
+        alert('Status di aplikasi berubah, tapi gagal sinkron ke Sheets.');
+    }
+};
 
           const handleDeleteSpj = (id) => {
             if (window.confirm('Hapus data SPJ ini secara permanen?')) setDataSpj(dataSpj.filter(spj => spj.id !== id));
