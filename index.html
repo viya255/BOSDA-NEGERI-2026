@@ -235,21 +235,23 @@
         catatan: '-'
     };
               const pindahkanData = async (item, tujuanSheet) => {
-    // GANTI URL DI BAWAH DENGAN URL SHEET "SIAP CAIR" DAN "REVISI" KAMU
-    const URL_SIAPCAIR = 'https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/tabs/RevisidanTunda'';
-    const URL_REVISI = 'https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/tabs/SiapCair';
+    // Pastikan URL di bawah ini diapit tanda kutip satu (') yang utuh
+    const URL_SIAPCAIR = 'https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/tabs/SiapCair';
+    const URL_REVISI = 'https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/tabs/RevisidanTunda';
     const URL_UTAMA = 'https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630';
 
-    const urlTujuan = tujuanSheet === 'siapCair' ? URL_SIAPCAIR : URL_REVISIDANTUNDA;
+    const urlTujuan = tujuanSheet === 'siapCair' ? URL_SIAPCAIR : URL_REVISI;
 
     try {
+        // Kirim data ke sheet tujuan
         await fetch(urlTujuan, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(item),
         });
 
-        await fetch(`${URL_UTAMA}/ID/${item.id}`, {
+        // Hapus data dari sheet utama
+        await fetch(`${URL_UTAMA}/ID/${item.ID}`, {
             method: 'DELETE',
         });
 
@@ -257,7 +259,7 @@
         window.location.reload(); 
     } catch (error) {
         console.error("Error:", error);
-        alert("Gagal memindahkan data.");
+        alert("Gagal memindahkan data. Periksa URL API Anda.");
     }
   };
 
