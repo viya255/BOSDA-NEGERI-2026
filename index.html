@@ -484,24 +484,22 @@
 
           const renderPenerimaan = () => (
   <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 max-w-2xl mx-auto">
-    {/* Header Form */}
-    <div className="flex justify-between items-center mb-6">
+    <div className="flex justify-between items-start mb-6">
       <h2 className="text-2xl font-bold text-gray-800 flex items-center">
         <IconPlusCircle className="mr-2 text-blue-600" size={24} /> Form Penerimaan SPJ Baru
       </h2>
-      {/* Tombol Akses Database */}
+      {/* Tambahan Link Database */}
       <a 
         href="https://docs.google.com/spreadsheets/d/1ADXv542J7mnQnfyIEc0ok5OYE5ZTHZzmSL-xX-dTgto/edit?usp=sharing" 
         target="_blank" 
         rel="noopener noreferrer"
-        className="text-xs font-bold bg-purple-100 text-purple-700 px-3 py-2 rounded-lg hover:bg-purple-200 transition flex items-center"
+        className="text-xs font-bold bg-purple-100 text-purple-700 px-3 py-2 rounded-lg hover:bg-purple-200 transition flex items-center shrink-0"
       >
         <IconDownload size={14} className="mr-1" /> Database
       </a>
     </div>
 
     <form onSubmit={handleAddNewSpj} className="space-y-4">
-      {/* ... sisa kode form Anda tetap sama ... */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <div className="flex justify-between items-center mb-1">
