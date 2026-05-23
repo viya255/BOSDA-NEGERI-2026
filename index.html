@@ -306,7 +306,7 @@
     const formData = new FormData(e.target);
     const selectedKecamatan = formData.get('kecamatan');
     
-    // Data yang akan dikirim ke Sheets
+    // Data yang akan dikirim (sesuaikan dengan nama kolom di Google Sheets Anda)
     const updatedDataPayload = {
         kecamatan: selectedKecamatan,
         pic: KECAMATAN_PIC[selectedKecamatan],
@@ -317,31 +317,30 @@
     };
 
     try {
-        // Kirim request ke SheetBest untuk update data berdasarkan ID
+        // PENTING: Pastikan URL ini benar sesuai dashboard SheetBest Anda
+        // Format: https://api.sheetbest.com/sheets/{YOUR_ID}/id/{ROW_ID}
         const response = await fetch(`https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/id/${editingSpj.id}`, {
-            method: 'PATCH',
+            method: 'PATCH', // Coba ganti ke 'PUT' jika 'PATCH' tidak berhasil
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updatedDataPayload),
         });
 
         if (response.ok) {
-            // Jika berhasil di server, baru update state lokal
-            const updatedData = dataSpj.map(spj => {
-                if (spj.id === editingSpj.id) {
-                    return { ...spj, ...updatedDataPayload };
-                }
-                return spj;
-            });
+            // Update tampilan web hanya setelah API berhasil
+            const updatedData = dataSpj.map(spj => 
+                spj.id === editingSpj.id ? { ...spj, ...updatedDataPayload } : spj
+            );
             setDataSpj(updatedData);
             setIsEditModalOpen(false);
-            setEditingSpj(null);
-            alert('Data berhasil diperbarui di Sheets!');
+            alert('Berhasil update ke Spreadsheet!');
         } else {
-            alert('Gagal memperbarui data di Sheets.');
+            const errorText = await response.text();
+            console.error('API Error:', errorText);
+            alert('Gagal update ke Spreadsheet. Cek konsol.');
         }
     } catch (error) {
-        console.error('Error updating Sheets:', error);
-        alert('Terjadi kesalahan koneksi ke server.');
+        console.error('Connection Error:', error);
+        alert('Terjadi kesalahan jaringan.');
     }
 };
               return spj;
