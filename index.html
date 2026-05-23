@@ -301,48 +301,18 @@
 
           const handleOpenEdit = (spj) => { setEditingSpj(spj); setIsEditModalOpen(true); };
 
-          const handleSaveEdit = async (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const selectedKecamatan = formData.get('kecamatan');
-    
-    // Data yang akan dikirim (sesuaikan dengan nama kolom di Google Sheets Anda)
-    const updatedDataPayload = {
-        kecamatan: selectedKecamatan,
-        pic: KECAMATAN_PIC[selectedKecamatan],
-        sekolah: formData.get('sekolah'),
-        triwulan: formData.get('triwulan'),
-        nominal: Number(formData.get('nominal')),
-        rincian: formData.get('rincian'),
-    };
-
-    try {
-        // PENTING: Pastikan URL ini benar sesuai dashboard SheetBest Anda
-        // Format: https://api.sheetbest.com/sheets/{YOUR_ID}/id/{ROW_ID}
-        const response = await fetch(`https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/id/${editingSpj.id}`, {
-            method: 'PUT', // Coba ganti ke 'PUT' jika 'PATCH' tidak berhasil
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updatedDataPayload),
-        });
-
-        if (response.ok) {
-            // Update tampilan web hanya setelah API berhasil
-            const updatedData = dataSpj.map(spj => 
-                spj.id === editingSpj.id ? { ...spj, ...updatedDataPayload } : spj
-            );
-            setDataSpj(updatedData);
-            setIsEditModalOpen(false);
-            alert('Berhasil update ke Spreadsheet!');
-        } else {
-            const errorText = await response.text();
-            console.error('API Error:', errorText);
-            alert('Gagal update ke Spreadsheet. Cek konsol.');
-        }
-    } catch (error) {
-        console.error('Connection Error:', error);
-        alert('Terjadi kesalahan jaringan.');
-    }
-};
+          const handleSaveEdit = (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const selectedKecamatan = formData.get('kecamatan');
+            const updatedData = dataSpj.map(spj => {
+              if (spj.id === editingSpj.id) {
+                return {
+                  ...spj, kecamatan: selectedKecamatan, pic: KECAMATAN_PIC[selectedKecamatan],
+                  sekolah: formData.get('sekolah'), triwulan: formData.get('triwulan'),
+                  nominal: Number(formData.get('nominal')), rincian: formData.get('rincian'),
+                };
+              }
               return spj;
             });
             setDataSpj(updatedData); setIsEditModalOpen(false); setEditingSpj(null);
