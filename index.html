@@ -223,17 +223,18 @@
     e.preventDefault();
     
     // 1. Data yang mau dikirim
-    const newSpj = {
-        id: `SPJ-00${dataSpj.length + 1}`,
-        kecamatan: addForm.kecamatan,
-        sekolah: addForm.sekolah,
-        tanggal: new Date().toISOString().split('T')[0],
-        triwulan: addForm.triwulan,
-        rincian: addForm.rincian,
-        nominal: Number(addForm.nominal),
-        status: 'Menunggu Verifikasi',
-        catatan: '-'
-    };
+   const newSpj = {
+    id: `SPJ-00${dataSpj.length + 1}`,
+    kecamatan: addForm.kecamatan,
+    sekolah: addForm.sekolah,
+    pic: KECAMATAN_PIC[addForm.kecamatan], // <--- TAMBAHKAN INI
+    tanggal: new Date().toISOString().split('T')[0],
+    triwulan: addForm.triwulan,
+    rincian: addForm.rincian,
+    nominal: Number(addForm.nominal),
+    status: 'Menunggu Verifikasi',
+    catatan: '-'
+};
               const pindahkanData = async (item, tujuanSheet) => {
     // Pastikan URL di bawah ini diapit tanda kutip satu (') yang utuh
     const URL_SIAPCAIR = 'https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/tabs/SiapCair';
