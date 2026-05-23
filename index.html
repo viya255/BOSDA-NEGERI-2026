@@ -237,11 +237,13 @@
 };
               const pindahkanData = async (item, tujuanSheet) => {
     // Pastikan URL di bawah ini diapit tanda kutip satu (') yang utuh
-    const URL_SIAPCAIR = 'https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/tabs/SiapCair';
-    const URL_REVISI = 'https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/tabs/RevisidanTunda';
-    const URL_UTAMA = 'https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630';
+    // GANTI URL DI BAWAH SESUAI TAB DI GOOGLE SHEETS
+const URL_SIAPCAIR = 'https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/tabs/SiapCair';
+const URL_REVISI = 'https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/tabs/Revisi';
+const URL_UTAMA = 'https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630';
 
-    const urlTujuan = tujuanSheet === 'siapCair' ? URL_SIAPCAIR : URL_REVISI;
+// Perhatikan: tujuanSheet === 'siapCair' akan diarahkan ke URL_SIAPCAIR
+const urlTujuan = tujuanSheet === 'siapCair' ? URL_SIAPCAIR : URL_REVISI;
 
     try {
         // Kirim data ke sheet tujuan
