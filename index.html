@@ -344,13 +344,23 @@
 
         if (response.ok) {
             alert('Berhasil terkirim ke Sheets!');
-            // Update UI...
+            
+            // 1. UPDATE STATE LOKAL agar tampilan langsung berubah
+            const dataBaru = dataSpj.map(spj => {
+                if (spj.id === editingSpj.id) {
+                    return { ...spj, ...updatedDataPayload };
+                }
+                return spj;
+            });
+            
+            setDataSpj(dataBaru); // <-- Ini yang membuat tampilan di browser refresh!
+            
+            // 2. Tutup modal
+            setIsEditModalOpen(false);
+            setEditingSpj(null);
         } else {
             alert('Gagal! Cek konsol (tekan F12)');
         }
-    } catch (error) {
-        console.error('Error:', error);
-    }
 };
 
           const handleDragStart = (e, id) => { setDraggedId(id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id); };
