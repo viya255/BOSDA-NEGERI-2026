@@ -303,9 +303,7 @@
 
          const handleSaveEdit = async (e) => {
     e.preventDefault();
-    
-    // Debugging: Lihat apa yang sedang kita edit
-    console.log("Data yang sedang diedit:", editingSpj);
+
     if (!editingSpj || !editingSpj.id) {
         alert("Error: ID tidak ditemukan!");
         return;
@@ -331,28 +329,23 @@
             body: JSON.stringify(updatedDataPayload),
         });
 
-        const result = await response.json();
-        console.log("Respon dari Sheets:", result);
-
         if (response.ok) {
             alert('Berhasil terkirim ke Sheets!');
             
-            // 1. UPDATE STATE LOKAL agar tampilan langsung berubah
-            const dataBaru = dataSpj.map(spj => {
-                if (spj.id === editingSpj.id) {
-                    return { ...spj, ...updatedDataPayload };
-                }
-                return spj;
-            });
+            setDataSpj(prevData => prevData.map(spj => 
+                spj.id === editingSpj.id ? { ...spj, ...updatedDataPayload } : spj
+            ));
             
-            setDataSpj(dataBaru); // <-- Ini yang membuat tampilan di browser refresh!
-            
-            // 2. Tutup modal
             setIsEditModalOpen(false);
             setEditingSpj(null);
         } else {
-            alert('Gagal! Cek konsol (tekan F12)');
+            alert('Gagal mengirim ke Sheets.');
         }
+    } catch (error) { // <--- Blok catch ini yang kemarin hilang/kurang
+        console.error('Error:', error);
+        alert('Terjadi kesalahan koneksi.');
+    } // <--- Jangan lupa tutup kurung kurawal penutup fungsi
+};
 
           const handleDragStart = (e, id) => { setDraggedId(id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id); };
           const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
