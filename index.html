@@ -484,10 +484,24 @@
 
           const renderPenerimaan = () => (
   <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 max-w-2xl mx-auto">
-    <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
-      <IconPlusCircle className="mr-2 text-blue-600" size={24} /> Form Penerimaan SPJ Baru
-    </h2>
+    {/* Header Form */}
+    <div className="flex justify-between items-center mb-6">
+      <h2 className="text-2xl font-bold text-gray-800 flex items-center">
+        <IconPlusCircle className="mr-2 text-blue-600" size={24} /> Form Penerimaan SPJ Baru
+      </h2>
+      {/* Tombol Akses Database */}
+      <a 
+        href="https://docs.google.com/spreadsheets/d/1ADXv542J7mnQnfyIEc0ok5OYE5ZTHZzmSL-xX-dTgto/edit?usp=sharing" 
+        target="_blank" 
+        rel="noopener noreferrer"
+        className="text-xs font-bold bg-purple-100 text-purple-700 px-3 py-2 rounded-lg hover:bg-purple-200 transition flex items-center"
+      >
+        <IconDownload size={14} className="mr-1" /> Database
+      </a>
+    </div>
+
     <form onSubmit={handleAddNewSpj} className="space-y-4">
+      {/* ... sisa kode form Anda tetap sama ... */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <div className="flex justify-between items-center mb-1">
@@ -534,7 +548,6 @@
         </div>
       </div>
 
-      {/* --- TOMBOL DENGAN LOADING --- */}
       <button 
         type="submit" 
         disabled={isLoading} 
@@ -552,7 +565,6 @@
           </>
         ) : "Simpan & Antrekan Verifikasi"}
       </button>
-        {/* ------------------------------------------- */}
     </form>
   </div>
 );
@@ -608,31 +620,15 @@
           return (
             <div className="min-h-screen bg-gray-100 flex font-sans">
               <aside className="w-64 bg-white shadow-md flex-col hidden md:flex z-10">
-  <div className="p-6 border-b">
-    <h1 className="text-xl font-extrabold text-blue-700">Sistem SPJ<span className="text-gray-800">BOS</span></h1>
-    <p className="text-xs text-gray-500">Dinas Pendidikan</p>
-  </div>
-  
-  <nav className="flex-1 p-4 space-y-1">
-    <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><IconDashboard/> <span>Dashboard</span></button>
-    <button onClick={() => setActiveTab('penerimaan')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium ${activeTab === 'penerimaan' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><IconFileText/> <span>Terima SPJ Baru</span></button>
-    <button onClick={() => setActiveTab('verifikasi')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium ${activeTab === 'verifikasi' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><IconClipboardCheck/> <span className="flex-1 text-left">Antrian Verifikasi</span> {stats.menunggu > 0 && <span className="bg-yellow-400 text-yellow-900 text-xs px-2 rounded-full">{stats.menunggu}</span>}</button>
-    <button onClick={() => setActiveTab('siapCair')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium ${activeTab === 'siapCair' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><IconBanknote/> <span>Antrian Siap Cair</span></button>
-    <button onClick={() => setActiveTab('kendala')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium ${activeTab === 'kendala' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><IconAlertCircle/> <span>Revisi & Tunda</span></button>
-  </nav>
-
-  {/* Link Database */}
-  <div className="p-4 border-t">
-    <a 
-        href="https://docs.google.com/spreadsheets/d/1ADXv542J7mnQnfyIEc0ok5OYE5ZTHZzmSL-xX-dTgto/edit?gid=0#gid=0" 
-        target="_blank" 
-        rel="noopener noreferrer"
-        className="w-full flex items-center justify-center space-x-2 px-4 py-3 rounded-xl text-sm font-bold bg-green-50 text-green-700 hover:bg-green-100 transition"
-    >
-        <IconDownload size={16}/> <span>Buka Database</span>
-    </a>
-  </div>
-</aside>
+                <div className="p-6 border-b"><h1 className="text-xl font-extrabold text-blue-700">Sistem SPJ<span className="text-gray-800">BOS</span></h1><p className="text-xs text-gray-500">Dinas Pendidikan</p></div>
+                <nav className="flex-1 p-4 space-y-1">
+                  <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><IconDashboard/> <span>Dashboard</span></button>
+                  <button onClick={() => setActiveTab('penerimaan')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium ${activeTab === 'penerimaan' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><IconFileText/> <span>Terima SPJ Baru</span></button>
+                  <button onClick={() => setActiveTab('verifikasi')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium ${activeTab === 'verifikasi' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><IconClipboardCheck/> <span className="flex-1 text-left">Antrian Verifikasi</span> {stats.menunggu > 0 && <span className="bg-yellow-400 text-yellow-900 text-xs px-2 rounded-full">{stats.menunggu}</span>}</button>
+                  <button onClick={() => setActiveTab('siapCair')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium ${activeTab === 'siapCair' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><IconBanknote/> <span>Antrian Siap Cair</span></button>
+                  <button onClick={() => setActiveTab('kendala')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium ${activeTab === 'kendala' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><IconAlertCircle/> <span>Revisi & Tunda</span></button>
+                </nav>
+              </aside>
 
               <main className="flex-1 flex flex-col h-screen overflow-hidden">
                 <header className="bg-white shadow-sm px-8 py-4 flex justify-between items-center"><div className="font-bold text-gray-700">Panel Verifikator</div></header>
@@ -844,3 +840,4 @@
     </script>
 </body>
 </html>
+
