@@ -219,31 +219,23 @@
             setAddForm(newForm);
           };
 
-          const handleAddNewSpj = (e) => {
-            e.preventDefault();
-            const today = new Date().toISOString().split('T')[0];
-            const newSpj = {
-              id: `SPJ-00${dataSpj.length + 1}`, kecamatan: addForm.kecamatan, pic: KECAMATAN_PIC[addForm.kecamatan],
-              sekolah: addForm.sekolah, tanggal: today, triwulan: addForm.triwulan,
-              rincian: addForm.rincian, nominal: Number(addForm.nominal), status: 'Menunggu Verifikasi', catatan: ''
-            };
-              const newSpj = {
-                  id: `SPJ-00${dataSpj.length + 1}`,
-                  kecamatan: addForm.kecamatan,
-                  sekolah: addForm.sekolah,
-                  tanggal: new Date().toISOString().split('T')[0],
-                  triwulan: addForm.triwulan,
-                  rincian: addForm.rincian,
-                  nominal: Number(addForm.nominal),
-                  status: 'Menunggu Verifikasi',
-                  catatan: '-'
-              };
-            setDataSpj([newSpj, ...dataSpj]);
-            setAddForm({ kecamatan: '', sekolah: '', rincian: '', nominal: '', triwulan: 'Triwulan 1' });
-            alert('SPJ Baru berhasil ditambahkan ke antrian!');
-            setActiveTab('verifikasi');
-          };
-            try {
+          const handleAddNewSpj = async (e) => {
+    e.preventDefault();
+    
+    // 1. Data yang mau dikirim
+    const newSpj = {
+        id: `SPJ-00${dataSpj.length + 1}`,
+        kecamatan: addForm.kecamatan,
+        sekolah: addForm.sekolah,
+        tanggal: new Date().toISOString().split('T')[0],
+        triwulan: addForm.triwulan,
+        rincian: addForm.rincian,
+        nominal: Number(addForm.nominal),
+        status: 'Menunggu Verifikasi',
+        catatan: '-'
+    };
+
+    try {
         // 2. Kirim data ke Google Sheets via SheetBest
         const response = await fetch('https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630', {
             method: 'POST',
