@@ -235,33 +235,6 @@
         status: 'Menunggu Verifikasi',
         catatan: '-'
     };
-              const handleUpdateSpj = async (updatedData) => {
-  // Contoh menggunakan API SheetBest
-  // updatedData.rowIndex didapat dari baris yang sedang diedit
-  const response = await fetch(`https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/id/${updatedData.id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(updatedData),({
-      id: updatedData.id,
-      kecamatan: updatedData.kecamatan,
-      sekolah: updatedData.sekolah,
-      pic: updatedData.pic,
-      tanggal: updatedData.tanggal,
-      triwulan: updatedData.triwulan,
-      rincian: updatedData.rincian,
-      nominal: updatedData.nominal,
-      status: updatedData.status,
-      catatan: updatedData.catatan
-    }),
-  });
-
-  if (response.ok) {
-    alert("Data berhasil diperbarui di Spreadsheet!");
-    fetchData(); // Refresh daftar agar tampilan sesuai dengan data baru di Sheets
-  } else {
-    alert("Gagal memperbarui data.");
-  }
-};
 
     try {
         // 2. Kirim data ke Google Sheets via SheetBest
@@ -322,57 +295,28 @@
     }
 };
 
-          const handleDeleteSpj = async (id, rowIndex) => {
-    if (!window.confirm("Yakin ingin menghapus data ini?")) return;
-
-    try {
-        // Coba gunakan rowIndex jika id gagal
-        const response = await fetch(`https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/id/${id}`, {
-    method: 'DELETE'
-});
-
-        if (response.ok) {
-            // Hapus dari state lokal setelah berhasil di Sheets
-            setDataSpj(dataSpj.filter(spj => spj.id !== id));
-            alert("Data berhasil dihapus!");
-        } else {
-            const errorMsg = await response.text();
-            console.error("Gagal hapus:", errorMsg);
-            alert("Gagal menghapus: " + errorMsg);
-        }
-    } catch (err) {
-        console.error("Error:", err);
-    }
-};
+          const handleDeleteSpj = (id) => {
+            if (window.confirm('Hapus data SPJ ini secara permanen?')) setDataSpj(dataSpj.filter(spj => spj.id !== id));
+          };
 
           const handleOpenEdit = (spj) => { setEditingSpj(spj); setIsEditModalOpen(true); };
 
-          const handleSaveEdit = async (e) => {
-    e.preventDefault();
-    
-    // Pastikan rowIndex tersedia
-    if (!editingSpj.rowIndex) {
-        alert("Error: Data tidak memiliki rowIndex. Tidak bisa menyimpan ke Spreadsheet.");
-        return;
-    }
-
-    try {
-        const response = await fetch(`https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630/rows/${editingSpj.rowIndex}`, {
-            method: 'PUT', // Menggunakan PUT untuk overwrite satu baris
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(editingSpj),
-        });
-
-        if (response.ok) {
-            alert("Data berhasil tersimpan!");
-            window.location.reload(); // Refresh untuk memastikan data sinkron
-        } else {
-            console.error("Gagal simpan:", await response.text());
-        }
-    } catch (err) {
-        console.error("Error:", err);
-    }
-};
+          const handleSaveEdit = (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const selectedKecamatan = formData.get('kecamatan');
+            const updatedData = dataSpj.map(spj => {
+              if (spj.id === editingSpj.id) {
+                return {
+                  ...spj, kecamatan: selectedKecamatan, pic: KECAMATAN_PIC[selectedKecamatan],
+                  sekolah: formData.get('sekolah'), triwulan: formData.get('triwulan'),
+                  nominal: Number(formData.get('nominal')), rincian: formData.get('rincian'),
+                };
+              }
+              return spj;
+            });
+            setDataSpj(updatedData); setIsEditModalOpen(false); setEditingSpj(null);
+          };
 
           const handleDragStart = (e, id) => { setDraggedId(id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id); };
           const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
