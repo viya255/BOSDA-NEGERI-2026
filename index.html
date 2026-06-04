@@ -88,7 +88,8 @@
         if (!num || !RAK_DATA[num]) return null;
         const kode = rincian.split(' ')[0];
         if (!RAK_DATA[num][kode]) return null;
-        const twNum = triwulan.replace('Triwulan ', '');
+       const twStr = Array.isArray(triwulan) ? triwulan[0] : triwulan;
+       const twNum = twStr ? twStr.replace('Triwulan ', '') : '1';
         return {
             total: RAK_DATA[num][kode]['t'] || 0,
             triwulan: RAK_DATA[num][kode][twNum] || 0,
@@ -128,7 +129,8 @@
 
         if (!rincianItem) return null;
 
-        const twNum = triwulan.replace('Triwulan ', '');
+        const twStr = Array.isArray(triwulan) ? triwulan[0] : triwulan;
+        const twNum = twStr ? twStr.replace('Triwulan ', '') : '1';;
         const twKey = `tw${twNum}`;
         return {
             total: rincianItem.paguTotal || 0,
