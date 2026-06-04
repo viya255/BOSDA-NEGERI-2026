@@ -920,6 +920,16 @@
                       <td className="p-4">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${spj.status === 'Siap Cair' ? 'bg-green-100 text-green-800' : spj.status === 'Revisi' ? 'bg-red-100 text-red-800' : spj.status === 'Menunggu Verifikasi' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>{spj.status}</span>
                         {spj.catatan && <div className="text-xs text-red-500 mt-1 max-w-[150px]">{spj.catatan}</div>}
+                        {spj.riwayatRevisi && spj.riwayatRevisi.length > 0 && (
+                          <div className="mt-1">
+                            {spj.riwayatRevisi.map((r, i) => (
+                              <div key={i} className="text-xs bg-orange-50 border border-orange-200 rounded px-2 py-1 mt-0.5 max-w-[200px]">
+                                <span className="font-bold text-orange-600">[{r.status} {r.tanggal}]</span>
+                                <span className="text-gray-600 ml-1">{r.catatan}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td className="p-4 text-right">
                         {requiresPicLock && currentPic !== spj.pic ? (
