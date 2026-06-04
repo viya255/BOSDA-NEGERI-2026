@@ -681,19 +681,11 @@
           // ============================================================
           const submitVerification = async () => {
             const today = new Date().toISOString().split('T')[0];
-           // Ambil riwayat revisi sebelumnya (kalau ada)
             const riwayatLama = selectedSpj.riwayatRevisi || [];
-          // Kalau keputusannya Revisi/Ditunda, simpan catatan baru ke riwayat
             const riwayatBaru = (verdict === 'Revisi' || verdict === 'Ditunda') && notes.trim()
-                ? [...riwayatLama, { tanggal: today, status: verdict, catatan: notes }]
-                : riwayatLama;
-
-            const updatePayload = {
-                status: verdict,
-                catatan: verdict === 'Siap Cair' ? '' : notes,
-                riwayatRevisi: riwayatBaru,   // ← INI yang baru
-                tanggal: today
-            };
+              ? [...riwayatLama, { tanggal: today, status: verdict, catatan: notes }]
+              : riwayatLama;
+            const updatePayload = { status: verdict, catatan: verdict === 'Siap Cair' ? '' : notes, riwayatRevisi: riwayatBaru, tanggal: today };
             const updatedData = dataSpj.map(spj => spj.id === selectedSpj.id ? { ...spj, ...updatePayload } : spj);
             setDataSpj(updatedData);
             setIsModalOpen(false);
