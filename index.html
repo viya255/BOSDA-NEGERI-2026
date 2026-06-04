@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+    <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
@@ -442,6 +442,8 @@
           const [draggedId, setDraggedId] = useState(null);
           const [aksesPic, setAksesPic] = useState('Semua');
           const [searchQuery, setSearchQuery] = useState('');
+          const [filterTriwulan, setFilterTriwulan] = useState('Semua');
+          const [sortOrder, setSortOrder] = useState('asc'); // asc = terlama dulu
 
           // ============================================================
           // TAMBAHAN: State untuk RAK BOSDA 2026
@@ -1425,6 +1427,17 @@
                   {(activeTab === 'verifikasi' || activeTab === 'siapCair' || activeTab === 'kendala') && (() => {
                     let dataSpjFiltered = dataSpj.filter(spj => activeTab === 'verifikasi' ? spj.status === 'Menunggu Verifikasi' : activeTab === 'siapCair' ? spj.status === 'Siap Cair' : spj.status === 'Revisi' || spj.status === 'Ditunda');
                     if (activeTab === 'verifikasi' && aksesPic !== 'Semua') dataSpjFiltered = dataSpjFiltered.filter(spj => spj.pic === aksesPic);
+                    // Filter triwulan
+                    if (filterTriwulan !== 'Semua') {
+                      dataSpjFiltered = dataSpjFiltered.filter(spj => spj.triwulan === filterTriwulan);
+                    }
+
+                    // Urutkan berdasarkan ID (terlama = angka terkecil dulu)
+                    dataSpjFiltered = [...dataSpjFiltered].sort((a, b) => {
+                      const numA = parseInt(a.id?.replace(/\D/g, '') || 0);
+                      const numB = parseInt(b.id?.replace(/\D/g, '') || 0);
+                      return sortOrder === 'asc' ? numA - numB : numB - numA;
+                    });
                     if (searchQuery.trim() !== '') {
                       const q = searchQuery.toLowerCase();
                       dataSpjFiltered = dataSpjFiltered.filter(spj =>
@@ -1453,6 +1466,18 @@
                                 <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
                               )}
                             </div>
+                            <select value={filterTriwulan} onChange={e => setFilterTriwulan(e.target.value)}
+                              className="w-full md:w-44 p-2 border border-gray-200 rounded-lg text-sm bg-white shadow-sm">
+                              <option value="Semua">Semua Triwulan</option>
+                              <option value="Triwulan 1">Triwulan 1</option>
+                              <option value="Triwulan 2">Triwulan 2</option>
+                              <option value="Triwulan 3">Triwulan 3</option>
+                              <option value="Triwulan 4">Triwulan 4</option>
+                            </select>
+                            <button onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                              className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white shadow-sm hover:bg-gray-50 font-medium">
+                              Urutan: {sortOrder === 'asc' ? '⬆ Terlama' : '⬇ Terbaru'}
+                            </button>
                             {activeTab === 'siapCair' && (
                               <button onClick={() => downloadExcel(dataSpjFiltered)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center shadow-md transition">
                                 <IconDownload size={16} className="mr-2"/> Unduh Rekap (Excel)
