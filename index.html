@@ -1473,7 +1473,7 @@
                             </select>
                           </div>
                         )}
-                        <TableTemplate data={dataSpjFiltered} showVerifyAction={activeTab === 'verifikasi' || activeTab === 'kendala'}
+                        <TableTemplate data={dataSpjFiltered} showVerifyAction={activeTab === 'verifikasi' || activeTab === 'kendala' || activeTab === 'siapCair'}
                           isDraggable={activeTab === 'siapCair'} onDragStart={handleDragStart} onDragOver={handleDragOver}
                           onDrop={handleDrop} onDragEnd={handleDragEnd} draggedId={draggedId}
                           requiresPicLock={activeTab === 'verifikasi'} currentPic={aksesPic}/>
