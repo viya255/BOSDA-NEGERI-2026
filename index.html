@@ -129,12 +129,15 @@
 
         if (!rincianItem) return null;
 
-        const twStr = Array.isArray(triwulan) ? triwulan[0] : triwulan;
-        const twNum = twStr ? twStr.replace('Triwulan ', '') : '1';;
-        const twKey = `tw${twNum}`;
+        const twArr = Array.isArray(triwulan) ? triwulan : [triwulan];
+        const totalTwPagu = twArr.reduce((acc, twStr) => {
+            const twNum = twStr ? twStr.replace('Triwulan ', '') : '1';
+            const twKey = `tw${twNum}`;
+            return acc + (rincianItem[twKey] || 0);
+        }, 0);
         return {
             total: rincianItem.paguTotal || 0,
-            triwulan: rincianItem[twKey] || 0,
+            triwulan: totalTwPagu,
             kode: kode
         };
     }
