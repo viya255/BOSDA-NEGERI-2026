@@ -980,6 +980,8 @@
           const renderRakBosda = () => {
             // Hitung total diajukan per sekolah dari dataSpj
             const getSpjDiajukan = (uptName) => {
+              if (uptName === 'UPT SDN 40 GRESIK') console.log('SDN 40 data:', dataSpj.filter(function(s){ return s.sekolah === uptName; }).length);
+              return dataSpj.filter(s => {
               return dataSpj.filter(s => {
                 const noRak = uptName.match(/\b(\d+)\b/)?.[1];
                 const noSpj = s.sekolah?.match(/\b(\d+)\b/)?.[1];
