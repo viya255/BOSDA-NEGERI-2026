@@ -432,7 +432,7 @@
           const [activeTab, setActiveTab] = useState('dashboard');
           const [dataSpj, setDataSpj] = useState(initialData);
           const [isLoading, setIsLoading] = useState(false);
-          const [addForm, setAddForm] = useState({ kecamatan: '', sekolah: '', rincian: '', nominal: '', triwulan: 'Triwulan 1' });
+          const [addForm, setAddForm] = useState({ kecamatan: '', sekolah: '', rincian: '', nominal: '', triwulan: [] });
           const [isModalOpen, setIsModalOpen] = useState(false);
           const [selectedSpj, setSelectedSpj] = useState(null);
           const [verdict, setVerdict] = useState('Siap Cair');
@@ -635,7 +635,15 @@
             revisi: dataSpj.filter(d => d.status === 'Revisi').length,
             ditunda: dataSpj.filter(d => d.status === 'Ditunda').length,
           };
-
+            const handleTriwulanChange = (nilai) => {
+              setAddForm(prev => {
+                const sudahAda = prev.triwulan.includes(nilai);
+                const baru = sudahAda
+                  ? prev.triwulan.filter(t => t !== nilai)
+                  : [...prev.triwulan, nilai].sort();
+                return { ...prev, triwulan: baru };
+              });
+            };
           const handleFormChange = (e) => {
             const { name, value } = e.target;
             let newForm = { ...addForm, [name]: value };
@@ -650,12 +658,18 @@
           const handleAddNewSpj = async (e) => {
             e.preventDefault();
             setIsLoading(true);
+              if (addForm.triwulan.length === 0) {
+              alert('Pilih minimal 1 triwulan!');
+              setIsLoading(false);
+              return;
+            }
+            const triwulanText = addForm.triwulan.join(' & ');
             const newSpj = {
               id: `SPJ-${dataSpj.length + 1}`,
               kecamatan: addForm.kecamatan, sekolah: addForm.sekolah,
               pic: KECAMATAN_PIC[addForm.kecamatan],
               tanggal: new Date().toISOString().split('T')[0],
-              triwulan: addForm.triwulan, rincian: addForm.rincian,
+              triwulan: triwulanText, rincian: addForm.rincian,
               nominal: Number(addForm.nominal), status: 'Menunggu Verifikasi', catatan: '-'
             };
             try {
@@ -663,7 +677,7 @@
               const response = await fetch('https://api.sheetbest.com/sheets/621834c3-c8ee-4836-8e10-23f6679f0630', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newSpj),
               });
-              setAddForm({ kecamatan: '', sekolah: '', rincian: '', nominal: '', triwulan: 'Triwulan 1' });
+              setAddForm({ kecamatan: '', sekolah: '', rincian: '', nominal: '', triwulan: [] });
               alert('Data berhasil disimpan dan tersinkron ke semua pengguna!');
               setActiveTab('verifikasi');
             } catch (error) {
@@ -865,12 +879,27 @@
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Triwulan Pelaksanaan</label>
-                    <select required name="triwulan" value={addForm.triwulan} onChange={handleFormChange} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-medium">
-                      <option value="Triwulan 1">Triwulan 1 (Jan-Mar)</option>
-                      <option value="Triwulan 2">Triwulan 2 (Apr-Jun)</option>
-                      <option value="Triwulan 3">Triwulan 3 (Jul-Sep)</option>
-                      <option value="Triwulan 4">Triwulan 4 (Okt-Des)</option>
-                    </select>
+                   <div className="border border-gray-300 rounded-lg p-3 space-y-2 bg-white">
+                      {[
+                        {val:'Triwulan 1', label:'TW 1 (Jan-Mar)'},
+                        {val:'Triwulan 2', label:'TW 2 (Apr-Jun)'},
+                        {val:'Triwulan 3', label:'TW 3 (Jul-Sep)'},
+                        {val:'Triwulan 4', label:'TW 4 (Okt-Des)'},
+                      ].map(tw => (
+                        <label key={tw.val} className="flex items-center gap-2 cursor-pointer hover:bg-blue-50 px-2 py-1 rounded">
+                          <input type="checkbox" checked={addForm.triwulan.includes(tw.val)}
+                            onChange={() => handleTriwulanChange(tw.val)}
+                            className="w-4 h-4 accent-blue-600"/>
+                          <span className={`text-sm font-medium ${addForm.triwulan.includes(tw.val) ? 'text-blue-700' : 'text-gray-700'}`}>
+                            {tw.label}
+                          </span>
+                          {addForm.triwulan.includes(tw.val) && <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">✓ Dipilih</span>}
+                        </label>
+                      ))}
+                      {addForm.triwulan.length === 0 && (
+                        <p className="text-xs text-red-400 italic px-2">* Pilih minimal 1 triwulan</p>
+                      )}
+                    </div>
                   </div>
                 </div>
                 {/* TAMBAHAN: Gunakan PaguInfoCardEnhanced untuk support semua 389 sekolah */}
