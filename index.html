@@ -266,7 +266,7 @@
                     const myNum = sekolah ? sekolah.match(/\b(\d+)\b/)?.[1] : null;
                     const sKode = s.rincian ? s.rincian.split(' ')[0] : '';
                     return sNum === myNum && sKode === kodeBelanja && s.triwulan === triwulan
-                        && (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair');
+                        && (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair' || s.status === 'Revisi' || s.status === 'Ditunda');
                 })
                 .reduce((acc, s) => acc + (Number(s.nominal) || 0), 0);
             const sisaPaguTw = paguInfo.triwulan - sudahDiajukan;
@@ -364,7 +364,7 @@
                     const myNum = sekolah ? sekolah.match(/\b(\d+)\b/)?.[1] : null;
                     const sKode = s.rincian ? s.rincian.split(' ')[0] : '';
                     return sNum === myNum && sKode === kodeBelanja && s.triwulan === triwulan
-                        && (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair');
+                        && (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair' || s.status === 'Revisi' || s.status === 'Ditunda');
                 })
                 .reduce((acc, s) => acc + (Number(s.nominal) || 0), 0);
             const sisaPaguTw = paguInfo.triwulan - sudahDiajukan;
@@ -981,7 +981,7 @@
             // Hitung total diajukan per sekolah dari dataSpj
             const getSpjDiajukan = (uptName) => {
               return dataSpj
-                .filter(s => s.sekolah === uptName && (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair'))
+                .filter(s => s.sekolah === uptName && (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair' || s.status === 'Revisi' || s.status === 'Ditunda')
                 .reduce((acc, s) => acc + (Number(s.nominal) || 0), 0);
             };
 
