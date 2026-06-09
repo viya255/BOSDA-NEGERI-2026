@@ -670,13 +670,23 @@
               return;
             }
             const triwulanText = addForm.triwulan.join(' & ');
-            const newSpj = {
+           const tanggalHariIni = new Date().toISOString().split('T')[0];
+           const newSpj = {
               id: `SPJ-${dataSpj.length + 1}`,
               kecamatan: addForm.kecamatan, sekolah: addForm.sekolah,
               pic: KECAMATAN_PIC[addForm.kecamatan],
-              tanggal: new Date().toISOString().split('T')[0],
+              tanggal: tanggalHariIni,
               triwulan: triwulanText, rincian: addForm.rincian,
-              nominal: Number(addForm.nominal), status: 'Menunggu Verifikasi', catatan: '-'
+              nominal: Number(addForm.nominal),
+              status: 'Menunggu Verifikasi',
+              catatan: '-',
+              riwayatRevisi: [
+                {
+                  tanggal: tanggalHariIni,
+                  status: 'Masuk',
+                  catatan: `SPJ diterima — ${addForm.rincian} — ${triwulanText}`
+                }
+              ]
             };
             try {
               await db.collection("spj_bos_data").add(newSpj);
