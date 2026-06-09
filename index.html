@@ -703,7 +703,7 @@
           const submitVerification = async () => {
             const today = new Date().toISOString().split('T')[0];
             const riwayatLama = selectedSpj.riwayatRevisi || [];
-            const riwayatBaru = (verdict === 'Revisi' || verdict === 'Ditunda') && notes.trim()
+            const riwayatBaru = notes.trim()
               ? [...riwayatLama, { tanggal: today, status: verdict, catatan: notes }]
               : riwayatLama;
             const updatePayload = { status: verdict, catatan: verdict === 'Siap Cair' ? '' : notes, riwayatRevisi: riwayatBaru, tanggal: today };
@@ -1565,7 +1565,13 @@
                       </div>
                       {(verdict === 'Revisi' || verdict === 'Ditunda') && (
                         <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
-                          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows="2" className="w-full p-2 border rounded-lg text-sm" placeholder="Tulis alasan revisi/tunda..."></textarea>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1">
+                            Catatan Verifikator (opsional, tersimpan permanen):
+                          </label>
+                          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows="2"
+                            className="w-full p-2 border rounded-lg text-sm"
+                            placeholder={verdict === 'Siap Cair' ? 'Catatan tambahan (opsional)...' : 'Tulis alasan revisi/tunda (wajib)...'}
+                          ></textarea>
                         </div>
                       )}
                     </div>
