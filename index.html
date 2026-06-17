@@ -965,9 +965,13 @@
                         {spj.riwayatRevisi && spj.riwayatRevisi.length > 0 && (
                           <div className="mt-1">
                             {spj.riwayatRevisi.map((r, i) => (
-                              <div key={i} className="text-xs bg-orange-50 border border-orange-200 rounded px-2 py-1 mt-0.5 max-w-[200px]">
-                                <span className="font-bold text-orange-600">[{r.status} {r.tanggal}]</span>
-                                <span className="text-gray-600 ml-1">{r.catatan}</span>
+                              <div key={i} className={`text-xs rounded px-2 py-1 mt-0.5 max-w-[200px] border flex items-start gap-1 ${r.selesai ? 'bg-green-50 border-green-200 opacity-70' : 'bg-orange-50 border-orange-200'}`}>
+                                <span className="flex-shrink-0 mt-0.5">{r.selesai ? '✅' : r.status === 'Revisi' ? '🔴' : r.status === 'Ditunda' ? '🟠' : '🔵'}</span>
+                                <div className="min-w-0">
+                                  <span className={`font-bold ${r.selesai ? 'text-green-600 line-through' : r.status === 'Revisi' ? 'text-red-600' : r.status === 'Ditunda' ? 'text-orange-600' : 'text-blue-600'}`}>[{r.status} {r.tanggal}]</span>
+                                  <span className={`ml-1 ${r.selesai ? 'text-green-500 line-through' : 'text-gray-600'}`}>{r.catatan}</span>
+                                  {r.selesai && <span className="ml-1 text-green-600 font-bold text-xs">— Selesai</span>}
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -1590,33 +1594,50 @@
                         <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
                           <div className="flex items-center justify-between mb-2">
                             <p className="text-xs font-bold text-orange-700">🕐 Riwayat Catatan Sebelumnya:</p>
-                            {Object.values(checkedRiwayat).some(Boolean) && (
-                              <button
-                                onClick={() => {
-                                  const newRiwayat = localRiwayat.filter((_, i) => !checkedRiwayat[i]);
-                                  setLocalRiwayat(newRiwayat);
-                                  setCheckedRiwayat({});
-                                }}
-                                className="text-xs bg-red-100 text-red-600 hover:bg-red-200 px-2 py-1 rounded font-bold transition flex items-center gap-1">
-                                🗑 Hapus yang dicentang ({Object.values(checkedRiwayat).filter(Boolean).length})
-                              </button>
-                            )}
+                            <div className="flex gap-1.5">
+                              {Object.values(checkedRiwayat).some(Boolean) && (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      const updated = localRiwayat.map((item, i) => checkedRiwayat[i] ? { ...item, selesai: !item.selesai } : item);
+                                      setLocalRiwayat(updated);
+                                      setCheckedRiwayat({});
+                                    }}
+                                    className="text-xs bg-green-100 text-green-700 hover:bg-green-200 px-2 py-1 rounded font-bold transition flex items-center gap-1">
+                                    ✅ Tandai Selesai
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const newRiwayat = localRiwayat.filter((_, i) => !checkedRiwayat[i]);
+                                      setLocalRiwayat(newRiwayat);
+                                      setCheckedRiwayat({});
+                                    }}
+                                    className="text-xs bg-red-100 text-red-600 hover:bg-red-200 px-2 py-1 rounded font-bold transition flex items-center gap-1">
+                                    🗑 Hapus ({Object.values(checkedRiwayat).filter(Boolean).length})
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </div>
                           <div className="space-y-1.5 max-h-48 overflow-y-auto">
                             {localRiwayat.map((r, i) => (
-                              <div key={i} className={`text-xs rounded px-2.5 py-1.5 border flex items-start gap-2 transition ${checkedRiwayat[i] ? 'bg-red-50 border-red-200 opacity-60' : 'bg-white border-orange-100'}`}>
+                              <div key={i} className={`text-xs rounded px-2.5 py-1.5 border flex items-start gap-2 transition ${r.selesai ? 'bg-green-50 border-green-200' : checkedRiwayat[i] ? 'bg-red-50 border-red-200 opacity-60' : 'bg-white border-orange-100'}`}>
                                 {/* Checkbox */}
                                 <input
                                   type="checkbox"
                                   checked={!!checkedRiwayat[i]}
                                   onChange={() => setCheckedRiwayat(prev => ({ ...prev, [i]: !prev[i] }))}
-                                  className="mt-0.5 w-3.5 h-3.5 accent-red-500 flex-shrink-0 cursor-pointer"
-                                  title="Centang untuk hapus"
+                                  className="mt-0.5 w-3.5 h-3.5 flex-shrink-0 cursor-pointer"
+                                  style={{accentColor: r.selesai ? '#16a34a' : '#ef4444'}}
                                 />
                                 <div className="flex-1 min-w-0">
-                                  <span className={`font-bold mr-1 ${r.status === 'Revisi' ? 'text-red-600' : r.status === 'Ditunda' ? 'text-orange-600' : r.status === 'Masuk' ? 'text-blue-600' : 'text-green-600'}`}>
-                                    [{r.status} — {r.tanggal}]
-                                  </span>
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    <span className="flex-shrink-0">{r.selesai ? '✅' : r.status === 'Revisi' ? '🔴' : r.status === 'Ditunda' ? '🟠' : '🔵'}</span>
+                                    <span className={`font-bold ${r.selesai ? 'text-green-600' : r.status === 'Revisi' ? 'text-red-600' : r.status === 'Ditunda' ? 'text-orange-600' : 'text-blue-600'}`}>
+                                      [{r.status} — {r.tanggal}]
+                                    </span>
+                                    {r.selesai && <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full text-xs font-bold">✓ Selesai</span>}
+                                  </div>
                                   {/* Mode edit atau tampil */}
                                   {editingRiwayatIdx === i ? (
                                     <div className="mt-1 flex gap-1.5 items-center">
@@ -1643,14 +1664,14 @@
                                       <button onClick={() => setEditingRiwayatIdx(null)} className="bg-gray-200 text-gray-600 px-2 py-0.5 rounded text-xs hover:bg-gray-300">✕</button>
                                     </div>
                                   ) : (
-                                    <span className={`text-gray-700 ${checkedRiwayat[i] ? 'line-through' : ''}`}>{r.catatan || '(tanpa catatan)'}</span>
+                                    <span className={`${r.selesai ? 'text-green-600 line-through' : checkedRiwayat[i] ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{r.catatan || '(tanpa catatan)'}</span>
                                   )}
                                 </div>
                                 {/* Tombol Edit */}
                                 {editingRiwayatIdx !== i && !checkedRiwayat[i] && (
                                   <button
                                     onClick={() => { setEditingRiwayatIdx(i); setEditingRiwayatText(r.catatan || ''); }}
-                                    className="flex-shrink-0 text-blue-400 hover:text-blue-600 transition ml-1"
+                                    className="flex-shrink-0 text-blue-400 hover:text-blue-600 transition"
                                     title="Edit catatan">
                                     ✏️
                                   </button>
@@ -1658,7 +1679,7 @@
                               </div>
                             ))}
                           </div>
-                          <p className="text-xs text-gray-400 mt-1.5 italic">✏️ klik untuk edit teks • ☑ centang lalu hapus untuk menghapus baris</p>
+                          <p className="text-xs text-gray-400 mt-1.5 italic">☑ centang → ✅ Tandai Selesai atau 🗑 Hapus • ✏️ klik untuk edit teks</p>
                         </div>
                       )}
                       <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
@@ -1761,3 +1782,4 @@
     </script>
 </body>
 </html>
+
