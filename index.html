@@ -152,6 +152,9 @@
         // BARU: Icon untuk Revisi dan Tunda terpisah
         const IconRotateCcw = ({size=20, className=""}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>;
         const IconPauseCircle = ({size=20, className=""}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="10" x2="10" y1="15" y2="9"/><line x1="14" x2="14" y1="15" y2="9"/></svg>;
+        // BARU: Icon untuk fitur "Sudah Cair" per GU
+        const IconWallet = ({size=20, className=""}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>;
+        const IconLayers = ({size=20, className=""}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>;
 
         const KECAMATAN_PIC = {
           'Gresik': 'Dimas', 'Cerme': 'Dimas', 'Duduksampeyan': 'Dimas', 'Benjeng': 'Dimas', 'Menganti': 'Dimas', 'Tambak': 'Dimas',
@@ -271,7 +274,7 @@
                     return sNum === myNum 
                         && sKode === kodeBelanja 
                         && twMatch
-                        && (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair' || s.status === 'Revisi' || s.status === 'Ditunda');
+                        && (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair' || s.status === 'Revisi' || s.status === 'Ditunda' || s.status === 'Sudah Cair');
                 });
                 const nominal = spjUntukTw.reduce((acc, s) => acc + (Number(s.nominal) || 0), 0);
                 sudahDiajukanPerTw[twStr] = nominal;
@@ -406,7 +409,7 @@
                     return sNum === myNum 
                         && sKode === kodeBelanja 
                         && twMatch
-                        && (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair' || s.status === 'Revisi' || s.status === 'Ditunda');
+                        && (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair' || s.status === 'Revisi' || s.status === 'Ditunda' || s.status === 'Sudah Cair');
                 });
                 const nominal = spjUntukTw.reduce((acc, s) => acc + (Number(s.nominal) || 0), 0);
                 sudahDiajukanPerTw[twStr] = nominal;
@@ -527,6 +530,16 @@
           const [rakDetailOpen, setRakDetailOpen] = useState(false);
 
           const [isSyncing, setIsSyncing] = useState(true);
+
+          // BARU: state untuk fitur Pencairan per GU
+          const [selectedForCair, setSelectedForCair] = useState({});
+          const [isCairModalOpen, setIsCairModalOpen] = useState(false);
+          const [guPilihan, setGuPilihan] = useState('');
+          const [guBaruText, setGuBaruText] = useState('');
+          const [guMode, setGuMode] = useState('pilih'); // 'pilih' atau 'baru'
+          const [tanggalCairInput, setTanggalCairInput] = useState('');
+          const [expandedGu, setExpandedGu] = useState({});
+          const [sudahCairSearch, setSudahCairSearch] = useState('');
 
           useEffect(() => {
             const unsubscribe = db.collection("spj_bos_data")
@@ -749,6 +762,7 @@
 
           // ============================================================
           // PERUBAHAN POIN 2: Stats dipisah antara revisi dan ditunda
+          // BARU: stats sudahCair
           // ============================================================
           const stats = {
             total: dataSpj.length,
@@ -756,6 +770,24 @@
             siapCair: dataSpj.filter(d => d.status === 'Siap Cair').length,
             revisi: dataSpj.filter(d => d.status === 'Revisi').length,
             ditunda: dataSpj.filter(d => d.status === 'Ditunda').length,
+            sudahCair: dataSpj.filter(d => d.status === 'Sudah Cair').length,
+          };
+
+          // Daftar GU yang sudah pernah dipakai (untuk dropdown pilih GU lama)
+          const daftarGuList = [...new Set(dataSpj.filter(d => d.status === 'Sudah Cair' && d.gu).map(d => d.gu))]
+            .sort((a, b) => {
+              const na = parseInt(String(a).replace(/\D/g, '')) || 0;
+              const nb = parseInt(String(b).replace(/\D/g, '')) || 0;
+              if (na !== nb) return na - nb;
+              return String(a).localeCompare(String(b));
+            });
+
+          const saranGuBaru = () => {
+            const nums = daftarGuList
+              .map(g => { const m = String(g).match(/(\d+)/); return m ? parseInt(m[1]) : 0; })
+              .filter(n => !isNaN(n));
+            const maxNum = nums.length > 0 ? Math.max(...nums) : 0;
+            return `GU ${maxNum + 1}`;
           };
 
           const handleTriwulanChange = (nilai) => {
@@ -917,6 +949,75 @@
             finally { setIsLoading(false); }
           };
 
+          // ============================================================
+          // BARU: Fungsi-fungsi untuk fitur Pencairan per GU
+          // ============================================================
+          const toggleSelectForCair = (id) => {
+            setSelectedForCair(prev => ({ ...prev, [id]: !prev[id] }));
+          };
+
+          const toggleSelectAllForCair = (listSpj) => {
+            const allChecked = listSpj.length > 0 && listSpj.every(s => selectedForCair[s.id]);
+            const updated = { ...selectedForCair };
+            listSpj.forEach(s => { updated[s.id] = !allChecked; });
+            setSelectedForCair(updated);
+          };
+
+          const jumlahTerpilih = Object.values(selectedForCair).filter(Boolean).length;
+
+          const openCairModal = () => {
+            if (jumlahTerpilih === 0) { alert('Pilih minimal 1 SPJ terlebih dahulu!'); return; }
+            setGuMode(daftarGuList.length > 0 ? 'pilih' : 'baru');
+            setGuPilihan(daftarGuList.length > 0 ? daftarGuList[daftarGuList.length - 1] : '');
+            setGuBaruText(saranGuBaru());
+            setTanggalCairInput(new Date().toISOString().split('T')[0]);
+            setIsCairModalOpen(true);
+          };
+
+          const submitPencairan = async () => {
+            const guFinal = guMode === 'baru' ? guBaruText.trim() : guPilihan;
+            if (!guFinal) { alert('Nama/nomor GU wajib diisi!'); return; }
+            if (!tanggalCairInput) { alert('Tanggal pencairan wajib diisi!'); return; }
+            const idsTerpilih = Object.keys(selectedForCair).filter(id => selectedForCair[id]);
+            const spjTerpilih = dataSpj.filter(s => idsTerpilih.includes(s.id));
+            if (spjTerpilih.length === 0) { alert('Tidak ada SPJ yang dipilih.'); return; }
+
+            const today = tanggalCairInput;
+            setIsLoading(true);
+            try {
+              const batch = db.batch();
+              spjTerpilih.forEach(spj => {
+                if (!spj._docId) return;
+                const docRef = db.collection("spj_bos_data").doc(spj._docId);
+                const riwayatBaru = [...(spj.riwayatRevisi || []), { tanggal: today, status: 'Sudah Cair', catatan: `Dicairkan pada ${guFinal}` }];
+                batch.update(docRef, { status: 'Sudah Cair', gu: guFinal, tanggalCair: today, riwayatRevisi: riwayatBaru, tanggal: today });
+              });
+              await batch.commit();
+
+              // Sinkron ke SheetBest (opsional, per item, tidak blok kalau gagal)
+              spjTerpilih.forEach(async (spj) => {
+                try {
+                  await fetch(`https://script.google.com/macros/s/AKfycbw7Bg-nPUQxOtyWJgUQKp0VaSE4SadAXr-iqkJLjSjiuR_jAtZsEHrxAk7SXnf42Hleqw/exec?id=${spj.id}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'Sudah Cair', gu: guFinal, tanggalCair: today, _method: 'PATCH', _id: spj.id }),
+                  });
+                } catch (sheetErr) {
+                  console.warn('SheetBest sync gagal untuk', spj.id, sheetErr.message);
+                }
+              });
+
+              setSelectedForCair({});
+              setIsCairModalOpen(false);
+              alert(`${spjTerpilih.length} SPJ berhasil dicairkan pada ${guFinal}!`);
+              setActiveTab('sudahCair');
+            } catch (error) {
+              console.error('Error:', error);
+              alert('Terjadi kesalahan saat memproses pencairan: ' + error.message);
+            } finally {
+              setIsLoading(false);
+            }
+          };
+
           const downloadExcel = (dataToDownload) => {
             if (dataToDownload.length === 0) { alert("Tidak ada data untuk diunduh."); return; }
             const tableHTML = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><style>.num{mso-number-format:"#\\,\\#\\#0";text-align:right;}.text-center{text-align:center;}</style></head><body><table border="1" style="border-collapse:collapse;font-family:Arial,sans-serif;"><thead><tr style="background-color:#16a34a;color:white;font-weight:bold;"><th style="padding:8px;">NO</th><th style="padding:8px;">KECAMATAN</th><th style="padding:8px;">SEKOLAH</th><th style="padding:8px;">TRIWULAN</th><th style="padding:8px;">RINCIAN BELANJA</th><th style="padding:8px;">NOMINAL (Rp)</th></tr></thead><tbody>${dataToDownload.map((row,i)=>`<tr><td class="text-center" style="padding:5px;">${i+1}</td><td style="padding:5px;">${row.kecamatan}</td><td style="padding:5px;">${row.sekolah}</td><td class="text-center" style="padding:5px;">${row.triwulan}</td><td style="padding:5px;">${row.rincian}</td><td class="num" style="padding:5px;">${row.nominal}</td></tr>`).join('')}</tbody></table></body></html>`;
@@ -927,10 +1028,20 @@
             link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link);
           };
 
+          const downloadExcelGu = (guName, listSpj) => {
+            if (listSpj.length === 0) { alert("Tidak ada data untuk diunduh."); return; }
+            const tableHTML = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><style>.num{mso-number-format:"#\\,\\#\\#0";text-align:right;}.text-center{text-align:center;}</style></head><body><table border="1" style="border-collapse:collapse;font-family:Arial,sans-serif;"><thead><tr style="background-color:#0d9488;color:white;font-weight:bold;"><th style="padding:8px;">NO</th><th style="padding:8px;">ID SPJ</th><th style="padding:8px;">KECAMATAN</th><th style="padding:8px;">SEKOLAH</th><th style="padding:8px;">TRIWULAN</th><th style="padding:8px;">RINCIAN BELANJA</th><th style="padding:8px;">TGL CAIR</th><th style="padding:8px;">NOMINAL (Rp)</th></tr></thead><tbody>${listSpj.map((row,i)=>`<tr><td class="text-center" style="padding:5px;">${i+1}</td><td style="padding:5px;">${row.id}</td><td style="padding:5px;">${row.kecamatan}</td><td style="padding:5px;">${row.sekolah}</td><td class="text-center" style="padding:5px;">${row.triwulan}</td><td style="padding:5px;">${row.rincian}</td><td class="text-center" style="padding:5px;">${row.tanggalCair || row.tanggal}</td><td class="num" style="padding:5px;">${row.nominal}</td></tr>`).join('')}</tbody></table></body></html>`;
+            const blob = new Blob([tableHTML], { type: 'application/vnd.ms-excel' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url); link.setAttribute("download", `Rekap_${guName.replace(/\s+/g,'_')}_${new Date().toISOString().split('T')[0]}.xls`);
+            link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link);
+          };
+
           const renderDashboard = () => (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-gray-800">Ringkasan Alur SPJ</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4">
                   <div className="p-3 bg-blue-100 text-blue-600 rounded-lg"><IconFileText size={24}/></div>
                   <div><p className="text-sm text-gray-500">Total SPJ Masuk</p><p className="text-2xl font-bold">{stats.total}</p></div>
@@ -951,6 +1062,11 @@
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4 cursor-pointer hover:bg-gray-50" onClick={() => setActiveTab('ditunda')}>
                   <div className="p-3 bg-orange-100 text-orange-600 rounded-lg"><IconPauseCircle size={24}/></div>
                   <div><p className="text-sm text-gray-500">Ditunda</p><p className="text-2xl font-bold">{stats.ditunda}</p></div>
+                </div>
+                {/* BARU: Card Sudah Cair */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center space-x-4 cursor-pointer hover:bg-gray-50" onClick={() => setActiveTab('sudahCair')}>
+                  <div className="p-3 bg-teal-100 text-teal-600 rounded-lg"><IconWallet size={24}/></div>
+                  <div><p className="text-sm text-gray-500">Sudah Cair</p><p className="text-2xl font-bold">{stats.sudahCair}</p></div>
                 </div>
               </div>
             </div>
@@ -1039,11 +1155,19 @@
             </div>
           );
 
-          const TableTemplate = ({ data, showVerifyAction, requiresPicLock, currentPic }) => (
+          const TableTemplate = ({ data, showVerifyAction, requiresPicLock, currentPic, selectableForCair }) => (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse bg-white rounded-xl shadow-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200 text-sm text-gray-600">
+                    {selectableForCair && (
+                      <th className="p-4 font-semibold w-10">
+                        <input type="checkbox"
+                          checked={data.length > 0 && data.every(s => selectedForCair[s.id])}
+                          onChange={() => toggleSelectAllForCair(data)}
+                          className="w-4 h-4 accent-teal-600 cursor-pointer"/>
+                      </th>
+                    )}
                     <th className="p-4 font-semibold">ID & Tgl Update</th>
                     <th className="p-4 font-semibold">Instansi & Triwulan</th>
                     <th className="p-4 font-semibold">Nominal & Rincian</th>
@@ -1052,13 +1176,20 @@
                   </tr>
                 </thead>
                 <tbody className="text-sm">
-                  {data.length === 0 ? <tr><td colSpan={5} className="p-8 text-center text-gray-500">Tidak ada data.</td></tr> : data.map((spj) => (
-                    <tr key={spj.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                  {data.length === 0 ? <tr><td colSpan={selectableForCair ? 6 : 5} className="p-8 text-center text-gray-500">Tidak ada data.</td></tr> : data.map((spj) => (
+                    <tr key={spj.id} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${selectableForCair && selectedForCair[spj.id] ? 'bg-teal-50' : ''}`}>
+                      {selectableForCair && (
+                        <td className="p-4">
+                          <input type="checkbox" checked={!!selectedForCair[spj.id]} onChange={() => toggleSelectForCair(spj.id)}
+                            className="w-4 h-4 accent-teal-600 cursor-pointer"/>
+                        </td>
+                      )}
                       <td className="p-4 font-medium text-gray-800">{spj.id}<br/><span className="text-xs text-gray-500 font-normal flex items-center mt-1"><IconClock size={12} className="mr-1"/>{spj.tanggal}</span></td>
                       <td className="p-4 font-medium text-gray-800">{spj.sekolah}<br/><span className="text-xs text-gray-500 font-normal flex items-center mt-1"><IconMapPin size={12} className="mr-1"/> Kec. {spj.kecamatan} (PIC: {spj.pic}) • {spj.triwulan}</span></td>
                       <td className="p-4 max-w-xs"><div className="font-bold text-blue-700">{formatRupiah(spj.nominal)}</div><div className="text-xs text-gray-500 truncate mt-1" title={spj.rincian}>{spj.rincian}</div></td>
                       <td className="p-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${spj.status === 'Siap Cair' ? 'bg-green-100 text-green-800' : spj.status === 'Revisi' ? 'bg-red-100 text-red-800' : spj.status === 'Ditunda' ? 'bg-orange-100 text-orange-800' : spj.status === 'Menunggu Verifikasi' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>{spj.status}</span>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${spj.status === 'Sudah Cair' ? 'bg-teal-100 text-teal-800' : spj.status === 'Siap Cair' ? 'bg-green-100 text-green-800' : spj.status === 'Revisi' ? 'bg-red-100 text-red-800' : spj.status === 'Ditunda' ? 'bg-orange-100 text-orange-800' : spj.status === 'Menunggu Verifikasi' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>{spj.status}</span>
+                        {spj.status === 'Sudah Cair' && spj.gu && <div className="text-xs text-teal-600 font-bold mt-1">📦 {spj.gu}</div>}
                         {spj.catatan && <div className="text-xs text-red-500 mt-1 max-w-[150px]">{spj.catatan}</div>}
                         {spj.riwayatRevisi && spj.riwayatRevisi.length > 0 && (
                           <div className="mt-1">
@@ -1099,7 +1230,7 @@
                 const noRak = uptName.match(/\b(\d+)\b/)?.[1];
                 const noSpj = s.sekolah?.match(/\b(\d+)\b/)?.[1];
                 return noRak && noSpj && noRak === noSpj &&
-                  (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair' || s.status === 'Revisi' || s.status === 'Ditunda');
+                  (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair' || s.status === 'Revisi' || s.status === 'Ditunda' || s.status === 'Sudah Cair');
               }).reduce((acc, s) => acc + (Number(s.nominal) || 0), 0);
             };
 
@@ -1111,7 +1242,7 @@
                   const normKode = kodeRincian.replace('5.1.02.01.01.', '').replace(/^0+/, '');
                   return s.sekolah === uptName
                     && (normSKode === normKode || sKode === kodeRincian)
-                    && (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair' || s.status === 'Revisi' || s.status === 'Ditunda');
+                    && (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair' || s.status === 'Revisi' || s.status === 'Ditunda' || s.status === 'Sudah Cair');
                 })
                 .reduce((acc, s) => acc + (Number(s.nominal) || 0), 0);
             };
@@ -1286,7 +1417,7 @@
                           const twKey = `tw${tw}`;
                           const twLabels = {1:'TW 1 (Jan-Mar)',2:'TW 2 (Apr-Jun)',3:'TW 3 (Jul-Sep)',4:'TW 4 (Okt-Des)'};
                           const diajukanTw = dataSpj
-                            .filter(s => s.sekolah === rakDetailSekolah.namaUpt && s.triwulan === `Triwulan ${tw}` && (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair'))
+                            .filter(s => s.sekolah === rakDetailSekolah.namaUpt && s.triwulan === `Triwulan ${tw}` && (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair' || s.status === 'Sudah Cair'))
                             .reduce((a, s) => a + (Number(s.nominal)||0), 0);
                           const paguTw = rakDetailSekolah[twKey] || 0;
                           const sisaTw = paguTw - diajukanTw;
@@ -1392,7 +1523,7 @@
                                         <td className="p-2.5 text-gray-700">{s.triwulan}</td>
                                         <td className="p-2.5 text-gray-700 max-w-[200px] truncate" title={s.rincian}>{s.rincian}</td>
                                         <td className="p-2.5 text-right font-bold text-blue-700">{formatRupiah(s.nominal)}</td>
-                                        <td className="p-2.5 text-center"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${s.status === 'Siap Cair' ? 'bg-green-100 text-green-800' : s.status === 'Revisi' ? 'bg-red-100 text-red-800' : s.status === 'Ditunda' ? 'bg-orange-100 text-orange-800' : s.status === 'Menunggu Verifikasi' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>{s.status}</span></td>
+                                        <td className="p-2.5 text-center"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${s.status === 'Sudah Cair' ? 'bg-teal-100 text-teal-800' : s.status === 'Siap Cair' ? 'bg-green-100 text-green-800' : s.status === 'Revisi' ? 'bg-red-100 text-red-800' : s.status === 'Ditunda' ? 'bg-orange-100 text-orange-800' : s.status === 'Menunggu Verifikasi' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>{s.status}</span></td>
                                       </tr>
                                     ))}
                                   </tbody>
@@ -1481,6 +1612,8 @@
               ditunda: 'bg-orange-100 text-orange-800',
             }[statusFilter];
 
+            const isSiapCairTab = statusFilter === 'siapCair';
+
             return (
               <div>
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
@@ -1559,12 +1692,164 @@
                   </div>
                 )}
 
+                {/* BARU: Bar aksi pencairan, khusus tab Siap Cair */}
+                {isSiapCairTab && (
+                  <div className="mb-4 bg-teal-50 border border-teal-200 p-4 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <IconWallet size={18} className="text-teal-600"/>
+                      <p className="text-sm text-teal-800">
+                        <span className="font-bold">{jumlahTerpilih}</span> SPJ terpilih untuk dicairkan.
+                        {jumlahTerpilih === 0 && <span className="text-teal-500"> Centang SPJ pada tabel di bawah, lalu klik "Cairkan ke GU".</span>}
+                      </p>
+                    </div>
+                    <button onClick={openCairModal} disabled={jumlahTerpilih === 0}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center shadow-md transition ${jumlahTerpilih === 0 ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700 text-white'}`}>
+                      <IconWallet size={16} className="mr-2"/> Cairkan ke GU ({jumlahTerpilih})
+                    </button>
+                  </div>
+                )}
+
                 <TableTemplate
                   data={dataSpjFiltered}
                   showVerifyAction={true}
                   requiresPicLock={statusFilter === 'verifikasi'}
                   currentPic={aksesPic}
+                  selectableForCair={isSiapCairTab}
                 />
+              </div>
+            );
+          };
+
+          // ============================================================
+          // BARU: Render tab "Sudah Cair" — list dikelompokkan per GU
+          // ============================================================
+          const renderSudahCair = () => {
+            let dataCair = dataSpj.filter(spj => spj.status === 'Sudah Cair');
+
+            if (sudahCairSearch.trim() !== '') {
+              const q = sudahCairSearch.toLowerCase();
+              dataCair = dataCair.filter(spj =>
+                (spj.sekolah && spj.sekolah.toLowerCase().includes(q)) ||
+                (spj.id && spj.id.toLowerCase().includes(q)) ||
+                (spj.kecamatan && spj.kecamatan.toLowerCase().includes(q)) ||
+                (spj.rincian && spj.rincian.toLowerCase().includes(q)) ||
+                (spj.gu && String(spj.gu).toLowerCase().includes(q))
+              );
+            }
+
+            // Kelompokkan per GU
+            const grouped = {};
+            dataCair.forEach(spj => {
+              const guKey = spj.gu || 'Tanpa GU';
+              if (!grouped[guKey]) grouped[guKey] = [];
+              grouped[guKey].push(spj);
+            });
+
+            const guKeys = Object.keys(grouped).sort((a, b) => {
+              const na = parseInt(String(a).replace(/\D/g, '')) || 0;
+              const nb = parseInt(String(b).replace(/\D/g, '')) || 0;
+              if (na !== nb) return nb - na; // GU terbaru di atas
+              return String(b).localeCompare(String(a));
+            });
+
+            const totalKeseluruhan = dataCair.reduce((a, s) => a + (Number(s.nominal) || 0), 0);
+
+            const toggleGu = (gu) => setExpandedGu(prev => ({ ...prev, [gu]: !prev[gu] }));
+
+            return (
+              <div>
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
+                  <div>
+                    <h2 className="text-xl font-bold flex items-center gap-2 text-gray-800">
+                      <IconWallet size={22} className="text-teal-600"/> SPJ Sudah Cair
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-teal-100 text-teal-800">{dataCair.length}</span>
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      Dikelompokkan per GU (Ganti Uang) • {guKeys.length} GU • Total: <span className="font-semibold text-teal-700">{formatRupiah(totalKeseluruhan)}</span>
+                    </p>
+                  </div>
+                  <div className="relative w-full md:w-72">
+                    <IconSearch size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+                    <input type="text" value={sudahCairSearch} onChange={e => setSudahCairSearch(e.target.value)}
+                      className="w-full pl-9 pr-8 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-teal-400 focus:outline-none bg-white shadow-sm"
+                      placeholder="Cari sekolah, ID, GU, rincian..."/>
+                    {sudahCairSearch && <button onClick={() => setSudahCairSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>}
+                  </div>
+                </div>
+
+                {guKeys.length === 0 ? (
+                  <div className="bg-white rounded-xl border border-gray-100 p-12 text-center text-gray-400 shadow-sm">
+                    <IconWallet size={36} className="mx-auto mb-2 text-gray-300"/>
+                    Belum ada SPJ yang dicairkan. SPJ akan muncul di sini setelah dicairkan dari tab <strong>Antrian Siap Cair</strong>.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {guKeys.map(gu => {
+                      const listSpj = grouped[gu];
+                      const totalGu = listSpj.reduce((a, s) => a + (Number(s.nominal) || 0), 0);
+                      const isOpen = expandedGu[gu] !== false; // default terbuka
+                      return (
+                        <div key={gu} className="bg-white rounded-xl border border-teal-100 shadow-sm overflow-hidden">
+                          <div onClick={() => toggleGu(gu)} className="flex items-center justify-between px-5 py-4 bg-teal-50 cursor-pointer hover:bg-teal-100 transition">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-teal-600 text-white rounded-lg"><IconLayers size={18}/></div>
+                              <div>
+                                <p className="font-bold text-teal-800 flex items-center gap-2 flex-wrap">
+                                  {gu}
+                                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-white text-teal-700 border border-teal-200">{listSpj.length} SPJ</span>
+                                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-teal-600 text-white flex items-center gap-1">
+                                    <IconClock size={11}/> {listSpj[0]?.tanggalCair || listSpj[0]?.tanggal || '-'}
+                                  </span>
+                                </p>
+                                <p className="text-xs text-teal-600 mt-0.5">Total: <span className="font-semibold">{formatRupiah(totalGu)}</span></p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button onClick={(e) => { e.stopPropagation(); downloadExcelGu(gu, listSpj); }}
+                                className="bg-white text-teal-700 hover:bg-teal-50 border border-teal-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center shadow-sm transition">
+                                <IconDownload size={13} className="mr-1"/> Excel
+                              </button>
+                              <IconChevronDown size={18} className={`text-teal-600 transition-transform ${isOpen ? 'rotate-180' : ''}`}/>
+                            </div>
+                          </div>
+                          {isOpen && (
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left border-collapse text-sm">
+                                <thead>
+                                  <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500">
+                                    <th className="p-3 font-semibold">ID</th>
+                                    <th className="p-3 font-semibold">Instansi & Triwulan</th>
+                                    <th className="p-3 font-semibold">Rincian</th>
+                                    <th className="p-3 font-semibold text-right">Nominal</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {listSpj.map(spj => (
+                                    <tr key={spj.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                      <td className="p-3 font-medium text-gray-700">{spj.id}</td>
+                                      <td className="p-3">
+                                        <div className="font-medium text-gray-800">{spj.sekolah}</div>
+                                        <div className="text-xs text-gray-500 flex items-center mt-0.5"><IconMapPin size={11} className="mr-1"/>Kec. {spj.kecamatan} • {spj.triwulan}</div>
+                                      </td>
+                                      <td className="p-3 text-xs text-gray-600 max-w-[220px] truncate" title={spj.rincian}>{spj.rincian}</td>
+                                      <td className="p-3 text-right font-bold text-teal-700">{formatRupiah(spj.nominal)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                                <tfoot>
+                                  <tr className="bg-teal-50 font-bold text-sm">
+                                    <td colSpan={3} className="p-3 text-teal-700">Total {gu}</td>
+                                    <td className="p-3 text-right text-teal-700">{formatRupiah(totalGu)}</td>
+                                  </tr>
+                                </tfoot>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           };
@@ -1581,11 +1866,17 @@
                     {isSyncing ? 'Menyambungkan...' : 'Tersinkron Realtime'}
                   </div>
                 </div>
-                <nav className="flex-1 p-4 space-y-1">
+                <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
                   <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><IconDashboard/> <span>Dashboard</span></button>
                   <button onClick={() => setActiveTab('penerimaan')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium ${activeTab === 'penerimaan' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><IconFileText/> <span>Terima SPJ Baru</span></button>
                   <button onClick={() => setActiveTab('verifikasi')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium ${activeTab === 'verifikasi' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><IconClipboardCheck/> <span className="flex-1 text-left">Antrian Verifikasi</span> {stats.menunggu > 0 && <span className="bg-yellow-400 text-yellow-900 text-xs px-2 rounded-full">{stats.menunggu}</span>}</button>
-                  <button onClick={() => setActiveTab('siapCair')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium ${activeTab === 'siapCair' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><IconBanknote/> <span>Antrian Siap Cair</span></button>
+                  <button onClick={() => setActiveTab('siapCair')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium ${activeTab === 'siapCair' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><IconBanknote/> <span className="flex-1 text-left">Antrian Siap Cair</span> {stats.siapCair > 0 && <span className="bg-green-100 text-green-800 text-xs px-2 rounded-full font-bold">{stats.siapCair}</span>}</button>
+                  {/* BARU: Menu Sudah Cair */}
+                  <button onClick={() => setActiveTab('sudahCair')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium ${activeTab === 'sudahCair' ? 'bg-teal-50 text-teal-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                    <IconWallet className={activeTab === 'sudahCair' ? 'text-teal-600' : ''}/>
+                    <span className="flex-1 text-left">Sudah Cair</span>
+                    {stats.sudahCair > 0 && <span className="bg-teal-100 text-teal-800 text-xs px-2 rounded-full font-bold">{stats.sudahCair}</span>}
+                  </button>
                   {/* PERUBAHAN POIN 2: Revisi & Tunda dipisah jadi 2 menu */}
                   <button onClick={() => setActiveTab('revisi')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium ${activeTab === 'revisi' ? 'bg-red-50 text-red-700' : 'text-gray-600 hover:bg-gray-50'}`}>
                     <IconRotateCcw className={activeTab === 'revisi' ? 'text-red-600' : ''}/>
@@ -1635,6 +1926,7 @@
                   {activeTab === 'rakBosda' && renderRakBosda()}
                   {activeTab === 'verifikasi' && renderSpjTable('verifikasi')}
                   {activeTab === 'siapCair' && renderSpjTable('siapCair')}
+                  {activeTab === 'sudahCair' && renderSudahCair()}
                   {activeTab === 'revisi' && renderSpjTable('revisi')}
                   {activeTab === 'ditunda' && renderSpjTable('ditunda')}
                 </div>
@@ -1790,6 +2082,77 @@
                         </button>
                       </div>
                     </form>
+                  </div>
+                </div>
+              )}
+
+              {/* BARU: MODAL PENCAIRAN KE GU */}
+              {isCairModalOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                  <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-xl font-bold flex items-center text-gray-800"><IconWallet className="mr-2 text-teal-600" size={24}/> Cairkan SPJ ke GU</h3>
+                      <button onClick={() => setIsCairModalOpen(false)}><IconXCircle/></button>
+                    </div>
+                    <p className="text-sm text-gray-500 mb-4"><span className="font-bold text-teal-700">{jumlahTerpilih} SPJ</span> akan ditandai <strong>Sudah Cair</strong> dan dimasukkan ke GU yang Anda pilih.</p>
+
+                    <div className="flex border border-gray-200 rounded-lg overflow-hidden mb-3">
+                      <button onClick={() => setGuMode('pilih')} disabled={daftarGuList.length === 0}
+                        className={`flex-1 py-2 text-sm font-bold transition ${guMode === 'pilih' ? 'bg-teal-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'} disabled:opacity-40 disabled:cursor-not-allowed`}>
+                        GU Sudah Ada
+                      </button>
+                      <button onClick={() => setGuMode('baru')}
+                        className={`flex-1 py-2 text-sm font-bold transition ${guMode === 'baru' ? 'bg-teal-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                        Buat GU Baru
+                      </button>
+                    </div>
+
+                    {guMode === 'pilih' ? (
+                      <div className="mb-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Pilih GU</label>
+                        <select value={guPilihan} onChange={(e) => setGuPilihan(e.target.value)}
+                          className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-sm">
+                          {daftarGuList.length === 0 && <option value="">-- Belum ada GU --</option>}
+                          {daftarGuList.map(g => {
+                            const totalG = dataSpj.filter(s => s.status === 'Sudah Cair' && s.gu === g).reduce((a, s) => a + (Number(s.nominal) || 0), 0);
+                            const countG = dataSpj.filter(s => s.status === 'Sudah Cair' && s.gu === g).length;
+                            return <option key={g} value={g}>{g} ({countG} SPJ — {formatRupiah(totalG)})</option>;
+                          })}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="mb-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Nama/Nomor GU Baru</label>
+                        <input type="text" value={guBaruText} onChange={(e) => setGuBaruText(e.target.value)}
+                          className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-sm"
+                          placeholder="Misal: GU 1 atau GU-01/2026"/>
+                        <p className="text-xs text-gray-400 mt-1">Saran otomatis: <button type="button" onClick={() => setGuBaruText(saranGuBaru())} className="text-teal-600 font-semibold hover:underline">{saranGuBaru()}</button></p>
+                      </div>
+                    )}
+
+                    <div className="mb-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal Pencairan</label>
+                      <input type="date" value={tanggalCairInput} onChange={(e) => setTanggalCairInput(e.target.value)}
+                        className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-sm"/>
+                    </div>
+
+                    <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200 max-h-40 overflow-y-auto">
+                      <p className="text-xs font-bold text-gray-500 mb-1.5">SPJ yang akan dicairkan:</p>
+                      {dataSpj.filter(s => selectedForCair[s.id]).map(s => (
+                        <div key={s.id} className="text-xs text-gray-600 flex justify-between py-0.5">
+                          <span>{s.id} — {s.sekolah}</span>
+                          <span className="font-semibold">{formatRupiah(s.nominal)}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex justify-end space-x-2 pt-4 mt-2 border-t">
+                      <button onClick={() => setIsCairModalOpen(false)} className="px-4 py-2 border rounded text-gray-600 font-medium">Batal</button>
+                      <button onClick={submitPencairan} disabled={isLoading}
+                        className={`px-6 py-2 text-white rounded font-bold shadow-md transition ${isLoading ? 'bg-teal-300 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700'}`}>
+                        {isLoading ? 'Memproses...' : 'Konfirmasi Pencairan'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
