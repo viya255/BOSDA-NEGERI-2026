@@ -538,6 +538,8 @@
           const [guBaruText, setGuBaruText] = useState('');
           const [guMode, setGuMode] = useState('pilih'); // 'pilih' atau 'baru'
           const [tanggalCairInput, setTanggalCairInput] = useState('');
+          const [editingTglCairGu, setEditingTglCairGu] = useState(null);
+          const [editingTglCairValue, setEditingTglCairValue] = useState('');
           const [expandedGu, setExpandedGu] = useState({});
           const [sudahCairSearch, setSudahCairSearch] = useState('');
 
@@ -1723,6 +1725,50 @@
           // ============================================================
           // BARU: Render tab "Sudah Cair" — list dikelompokkan per GU
           // ============================================================
+          const startEditTglCairGu = (gu, listSpj) => {
+            setEditingTglCairGu(gu);
+            setEditingTglCairValue(listSpj[0]?.tanggalCair || listSpj[0]?.tanggal || new Date().toISOString().split('T')[0]);
+          };
+
+          const cancelEditTglCairGu = () => {
+            setEditingTglCairGu(null);
+            setEditingTglCairValue('');
+          };
+
+          const saveEditTglCairGu = async (gu, listSpj) => {
+            if (!editingTglCairValue) { alert('Tanggal wajib diisi!'); return; }
+            setIsLoading(true);
+            try {
+              const batch = db.batch();
+              listSpj.forEach(spj => {
+                if (!spj._docId) return;
+                const docRef = db.collection("spj_bos_data").doc(spj._docId);
+                batch.update(docRef, { tanggalCair: editingTglCairValue });
+              });
+              await batch.commit();
+
+              // Sinkron ke SheetBest (opsional, per item, tidak blok kalau gagal)
+              listSpj.forEach(async (spj) => {
+                try {
+                  await fetch(`https://script.google.com/macros/s/AKfycbw7Bg-nPUQxOtyWJgUQKp0VaSE4SadAXr-iqkJLjSjiuR_jAtZsEHrxAk7SXnf42Hleqw/exec?id=${spj.id}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tanggalCair: editingTglCairValue, _method: 'PATCH', _id: spj.id }),
+                  });
+                } catch (sheetErr) {
+                  console.warn('SheetBest sync gagal untuk', spj.id, sheetErr.message);
+                }
+              });
+
+              setEditingTglCairGu(null);
+              setEditingTglCairValue('');
+            } catch (error) {
+              console.error('Error:', error);
+              alert('Gagal mengubah tanggal cair: ' + error.message);
+            } finally {
+              setIsLoading(false);
+            }
+          };
+
           const renderSudahCair = () => {
             let dataCair = dataSpj.filter(spj => spj.status === 'Sudah Cair');
 
@@ -1797,9 +1843,26 @@
                                 <p className="font-bold text-teal-800 flex items-center gap-2 flex-wrap">
                                   {gu}
                                   <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-white text-teal-700 border border-teal-200">{listSpj.length} SPJ</span>
-                                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-teal-600 text-white flex items-center gap-1">
-                                    <IconClock size={11}/> {listSpj[0]?.tanggalCair || listSpj[0]?.tanggal || '-'}
-                                  </span>
+                                  {editingTglCairGu === gu ? (
+                                    <span className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                      <input type="date" value={editingTglCairValue} onChange={(e) => setEditingTglCairValue(e.target.value)}
+                                        autoFocus className="text-xs font-medium px-2 py-0.5 rounded-lg border border-teal-300 focus:ring-2 focus:ring-teal-400 focus:outline-none"/>
+                                      <button onClick={() => saveEditTglCairGu(gu, listSpj)} disabled={isLoading}
+                                        className="bg-teal-600 hover:bg-teal-700 text-white p-1 rounded-full transition disabled:opacity-50" title="Simpan">
+                                        <IconCheckCircle2 size={14}/>
+                                      </button>
+                                      <button onClick={cancelEditTglCairGu} disabled={isLoading}
+                                        className="bg-gray-200 hover:bg-gray-300 text-gray-600 p-1 rounded-full transition disabled:opacity-50" title="Batal">
+                                        <IconXCircle size={14}/>
+                                      </button>
+                                    </span>
+                                  ) : (
+                                    <span onClick={(e) => { e.stopPropagation(); startEditTglCairGu(gu, listSpj); }}
+                                      className="text-xs font-medium px-2 py-0.5 rounded-full bg-teal-600 text-white flex items-center gap-1 cursor-pointer hover:bg-teal-700 transition" title="Klik untuk ubah tanggal cair">
+                                      <IconClock size={11}/> {listSpj[0]?.tanggalCair || listSpj[0]?.tanggal || '-'}
+                                      <IconEdit size={10} className="ml-0.5 opacity-80"/>
+                                    </span>
+                                  )}
                                 </p>
                                 <p className="text-xs text-teal-600 mt-0.5">Total: <span className="font-semibold">{formatRupiah(totalGu)}</span></p>
                               </div>
