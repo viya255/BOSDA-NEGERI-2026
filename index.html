@@ -128,6 +128,23 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
+        // Portal: merender children langsung ke document.body.
+        // Ini mencegah modal "kepotong"/tertutup sidebar karena terjebak
+        // di dalam stacking context (relative/z-index) container lain.
+        const Portal = ({ children }) => {
+          const elRef = useRef(null);
+          if (!elRef.current && typeof document !== 'undefined') {
+            elRef.current = document.createElement('div');
+          }
+          useEffect(() => {
+            const el = elRef.current;
+            document.body.appendChild(el);
+            return () => { document.body.removeChild(el); };
+          }, []);
+          if (!elRef.current) return null;
+          return ReactDOM.createPortal(children, elRef.current);
+        };
+
         const IconDashboard = ({size=20, className=""}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>;
         const IconFileText = ({size=20, className=""}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>;
         const IconClipboardCheck = ({size=20, className=""}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg>;
@@ -1404,17 +1421,18 @@
                 )}
 
                 {rakDetailOpen && rakDetailSekolah && (
-                  <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-2xl w-full max-w-5xl shadow-2xl flex flex-col max-h-[92vh]">
-                      <div className="flex justify-between items-start p-5 border-b bg-green-600 rounded-t-2xl">
-                        <div>
-                          <h3 className="text-lg font-bold text-white flex items-center gap-2"><IconTable size={20}/> {rakDetailSekolah.namaDisplay}</h3>
-                          <p className="text-green-100 text-sm mt-0.5">{rakDetailSekolah.namaAsli}</p>
-                          <p className="text-green-200 text-xs mt-1">Kecamatan {rakDetailSekolah.kecamatan} • Pagu Total: {formatRupiah(rakDetailSekolah.paguTotal)}</p>
+                  <Portal>
+                  <div className={`fixed inset-y-0 right-0 left-0 ${sidebarOpen ? 'md:left-64' : 'md:left-0'} transition-all duration-300 bg-black bg-opacity-60 flex items-center justify-center z-[999] p-2 sm:p-4`}>
+                    <div className="bg-white rounded-2xl w-full max-w-5xl shadow-2xl flex flex-col max-h-[95vh] sm:max-h-[92vh]">
+                      <div className="flex justify-between items-start p-4 sm:p-5 border-b bg-green-600 rounded-t-2xl">
+                        <div className="min-w-0 pr-2">
+                          <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2 truncate"><IconTable size={20}/> <span className="truncate">{rakDetailSekolah.namaDisplay}</span></h3>
+                          <p className="text-green-100 text-xs sm:text-sm mt-0.5 truncate">{rakDetailSekolah.namaAsli}</p>
+                          <p className="text-green-200 text-xs mt-1 truncate">Kecamatan {rakDetailSekolah.kecamatan} • Pagu Total: {formatRupiah(rakDetailSekolah.paguTotal)}</p>
                         </div>
-                        <button onClick={() => setRakDetailOpen(false)} className="text-white hover:text-green-200 transition"><IconXCircle size={24}/></button>
+                        <button onClick={() => setRakDetailOpen(false)} className="text-white hover:text-green-200 transition flex-shrink-0"><IconXCircle size={24}/></button>
                       </div>
-                      <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-3 border-b bg-gray-50">
+                      <div className="p-3 sm:p-4 grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 border-b bg-gray-50">
                         {[1,2,3,4].map(tw => {
                           const twKey = `tw${tw}`;
                           const twLabels = {1:'TW 1 (Jan-Mar)',2:'TW 2 (Apr-Jun)',3:'TW 3 (Jul-Sep)',4:'TW 4 (Okt-Des)'};
@@ -1540,6 +1558,7 @@
                       </div>
                     </div>
                   </div>
+                  </Portal>
                 )}
               </div>
             );
