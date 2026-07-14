@@ -75,6 +75,27 @@
         return m ? m[1] : null;
     }
 
+    // Ambil peta nominal per-triwulan dari satu record SPJ.
+    // Record baru (setelah redesain) sudah punya field nominalPerTw yang akurat.
+    // Record lama (sebelum redesain) belum punya field ini -> fallback: bagi rata
+    // nominal totalnya ke triwulan-triwulan yang ditandai di record tsb (perkiraan,
+    // karena data lama tidak menyimpan rincian per triwulan).
+    function getNominalPerTwMap(s) {
+        if (s && s.nominalPerTw && typeof s.nominalPerTw === 'object' && Object.keys(s.nominalPerTw).length > 0) {
+            const map = {};
+            Object.keys(s.nominalPerTw).forEach(tw => { map[tw] = Number(s.nominalPerTw[tw]) || 0; });
+            return map;
+        }
+        // Fallback data lama: split rata
+        const tags = (s && s.triwulan ? String(s.triwulan).split(' & ') : []).map(t => t.trim()).filter(Boolean);
+        const nominal = Number(s && s.nominal) || 0;
+        if (tags.length === 0) return {};
+        const rata = nominal / tags.length;
+        const map = {};
+        tags.forEach(t => { map[t] = rata; });
+        return map;
+    }
+
     function getPaguInfo(sekolah, rincian, triwulan) {
         const num = getSchoolNumber(sekolah);
         if (!num || !RAK_DATA[num]) return null;
@@ -122,6 +143,41 @@
             triwulan: totalTwPagu,
             kode: kode
         };
+    }
+
+    // Bagi otomatis nominal total ke triwulan-triwulan yang dipilih:
+    // ambil dari triwulan paling awal dulu sampai sisa pagunya habis,
+    // baru sisanya "meluber" ke triwulan berikutnya. Ini menghindari user
+    // harus mengisi nominal per-TW satu-satu secara manual.
+    function autoSplitNominalPerTw(sekolah, rincian, twArr, totalNominal, dataSpjList) {
+        if (!sekolah || !rincian || !twArr || twArr.length === 0) return {};
+        const kodeBelanja = rincian.split(' ')[0];
+        const myNum = getSchoolNumber(sekolah);
+        const spjRelevan = (dataSpjList || []).filter(s => {
+            const sNum = s.sekolah ? s.sekolah.match(/\b(\d+)\b/)?.[1] : null;
+            const sKode = s.rincian ? s.rincian.split(' ')[0] : '';
+            const statusValid = (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair' || s.status === 'Revisi' || s.status === 'Ditunda' || s.status === 'Sudah Cair');
+            return sNum === myNum && sKode === kodeBelanja && statusValid;
+        });
+        const twUrut = [...twArr].sort(); // "Triwulan 1" < "Triwulan 2" < ... aman diurutkan sebagai string
+        let sisaAlokasi = Number(totalNominal) || 0;
+        const hasil = {};
+        twUrut.forEach(tw => {
+            const paguInfoTw = getPaguInfoEnhanced(sekolah, rincian, [tw]);
+            const paguTw = paguInfoTw ? paguInfoTw.triwulan : 0;
+            const sudahDiajukanTw = spjRelevan.reduce((acc, s) => acc + (Number(getNominalPerTwMap(s)[tw]) || 0), 0);
+            const sisaTw = Math.max(0, paguTw - sudahDiajukanTw);
+            const alokasi = Math.min(sisaAlokasi, sisaTw);
+            if (alokasi > 0) hasil[tw] = alokasi;
+            sisaAlokasi -= alokasi;
+        });
+        // Kalau semua TW terpilih pagunya sudah habis tapi nominal masih tersisa,
+        // taruh sisanya di TW terakhir (biar total tetap pas & PAGU HABIS tetap kedeteksi)
+        if (sisaAlokasi > 0) {
+            const twTerakhir = twUrut[twUrut.length - 1];
+            hasil[twTerakhir] = (hasil[twTerakhir] || 0) + sisaAlokasi;
+        }
+        return hasil;
     }
     </script>
 
@@ -249,59 +305,72 @@
 
         const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
 
-        // ============================================================
-        // PERUBAHAN POIN 3: PaguInfoCard yang lebih akurat
-        // Sekarang menghitung sisa pagu dengan benar:
-        // - Mengecek semua SPJ yang sudah diajukan (semua status kecuali yg sudah dibatalkan)
-        // - Menampilkan sisa pagu per TW dengan jelas
-        // - Memperingatkan kalau pagu TW sudah habis
-        // ============================================================
-        const PaguInfoCard = ({ sekolah, rincian, triwulan, nominalInput, dataSpj }) => {
+        // Format angka mentah jadi tampilan "1.168.400" (titik ribuan) buat input nominal.
+        // Hanya menyisakan digit, jadi aman dipakai bolak-balik format <-> parse.
+        const formatRibuan = (val) => {
+            if (val === undefined || val === null || val === '') return '';
+            const digits = String(val).replace(/\D/g, '');
+            if (!digits) return '';
+            return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        };
+        // Kebalikan formatRibuan: buang semua titik/karakter non-digit, hasilkan angka mentah (string).
+        const parseRibuan = (val) => String(val || '').replace(/\D/g, '');
+
+
+        const PaguInfoCardEnhanced = ({ sekolah, rincian, triwulan, nominalInput, dataSpj }) => {
             if (!sekolah || !rincian || !triwulan) return null;
             
-            // Normalisasi triwulan jadi array untuk support multi-TW
             const twArr = Array.isArray(triwulan) ? triwulan : (triwulan ? [triwulan] : []);
             if (twArr.length === 0) return null;
             
-            const paguInfo = getPaguInfo(sekolah, rincian, twArr);
-            if (!paguInfo) return (
-                <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-500 italic flex items-center gap-2">
-                    <IconInfo size={15} className="text-gray-400 flex-shrink-0"/>
-                    <span>Data pagu RAK tidak ditemukan untuk kombinasi ini.</span>
-                </div>
-            );
+            const paguInfo = getPaguInfoEnhanced(sekolah, rincian, twArr);
+            if (!paguInfo) {
+                const num = getSchoolNumber(sekolah);
+                const isInRakData = num && RAK_DATA[num];
+                if (num && !isInRakData && window.rakDataGlobal.length === 0) {
+                    return (
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-600 italic flex items-center gap-2">
+                            <IconInfo size={15} className="text-blue-400 flex-shrink-0"/>
+                            <span>Info pagu akan tersedia setelah tab <strong>RAK BOSDA</strong> dibuka minimal sekali untuk memuat data.</span>
+                        </div>
+                    );
+                }
+                return (
+                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-500 italic flex items-center gap-2">
+                        <IconInfo size={15} className="text-gray-400 flex-shrink-0"/>
+                        <span>Data pagu RAK tidak ditemukan untuk kombinasi ini.</span>
+                    </div>
+                );
+            }
             
             const kodeBelanja = rincian.split(' ')[0];
             const myNum = sekolah ? sekolah.match(/\b(\d+)\b/)?.[1] : null;
             
-            // Hitung semua SPJ yang sudah diajukan untuk sekolah+rincian+triwulan ini
-            // Status yang "mengambil" pagu: Menunggu Verifikasi, Siap Cair, Revisi, Ditunda
-            // (semua status KECUALI yang sudah benar-benar dibatalkan/dihapus)
-            const sudahDiajukanPerTw = {};
-            let totalSudahDiajukan = 0;
-            
-            twArr.forEach(twStr => {
-                const spjUntukTw = dataSpj.filter(s => {
-                    const sNum = s.sekolah ? s.sekolah.match(/\b(\d+)\b/)?.[1] : null;
-                    const sKode = s.rincian ? s.rincian.split(' ')[0] : '';
-                    // Cek apakah triwulan SPJ ini termasuk dalam TW yang kita cek
-                    // SPJ bisa berisi "Triwulan 1 & Triwulan 2" dll
-                    const spjTw = s.triwulan || '';
-                    const twMatch = spjTw === twStr || spjTw.includes(twStr);
-                    return sNum === myNum 
-                        && sKode === kodeBelanja 
-                        && twMatch
-                        && (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair' || s.status === 'Revisi' || s.status === 'Ditunda' || s.status === 'Sudah Cair');
-                });
-                const nominal = spjUntukTw.reduce((acc, s) => acc + (Number(s.nominal) || 0), 0);
-                sudahDiajukanPerTw[twStr] = nominal;
-                totalSudahDiajukan += nominal;
+            // SPJ (sekolah+rincian+status valid) yang relevan, lengkap dengan peta nominal per-triwulannya
+            const spjRelevan = dataSpj.filter(s => {
+                const sNum = s.sekolah ? s.sekolah.match(/\b(\d+)\b/)?.[1] : null;
+                const sKode = s.rincian ? s.rincian.split(' ')[0] : '';
+                const statusValid = (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair' || s.status === 'Revisi' || s.status === 'Ditunda' || s.status === 'Sudah Cair');
+                return sNum === myNum && sKode === kodeBelanja && statusValid;
             });
+
+            // Breakdown akurat per-TW: jumlahkan porsi nominal yang memang tercatat untuk TW tsb
+            // (dari nominalPerTw kalau record baru, atau hasil split-rata kalau record lama)
+            const sudahDiajukanPerTw = {};
+            twArr.forEach(twStr => {
+                sudahDiajukanPerTw[twStr] = spjRelevan.reduce((acc, s) => {
+                    const map = getNominalPerTwMap(s);
+                    return acc + (Number(map[twStr]) || 0);
+                }, 0);
+            });
+
+            // Total untuk kombinasi TW yang dipilih = jumlah breakdown tiap TW (tidak dobel,
+            // karena tiap TW cuma disumbang porsinya sendiri-sendiri oleh tiap SPJ)
+            let totalSudahDiajukan = 0;
+            twArr.forEach(twStr => { totalSudahDiajukan += sudahDiajukanPerTw[twStr]; });
             
-            // Hitung sisa pagu untuk SEMUA TW yang dipilih
             const sisaPaguTw = paguInfo.triwulan - totalSudahDiajukan;
             const sisaPaguTotal = paguInfo.total - totalSudahDiajukan;
-            
             const inputNominal = Number(nominalInput) || 0;
             const twHasNoPagu = paguInfo.triwulan === 0;
             const isOverBudget = inputNominal > 0 && (inputNominal > sisaPaguTw || inputNominal > sisaPaguTotal);
@@ -331,22 +400,20 @@
                                 {twHasNoPagu ? 'Tidak dianggarkan di TW ini' : formatRupiah(paguInfo.triwulan)}
                             </span>
                             
-                            {/* Tampilkan detail per TW kalau ada beberapa TW dipilih */}
-                            {twArr.length > 1 && twArr.map(tw => {
-                                const twSingle = getPaguInfo(sekolah, rincian, [tw]);
-                                const diajukanTw = sudahDiajukanPerTw[tw] || 0;
-                                return twSingle && twSingle.triwulan > 0 ? (
-                                    <React.Fragment key={tw}>
-                                        <span className="text-gray-400 text-xs pl-3">↳ {tw}</span>
-                                        <span className="text-gray-600 text-xs text-right">{formatRupiah(twSingle.triwulan)}{diajukanTw > 0 && <span className="text-orange-500"> (diajukan {formatRupiah(diajukanTw)})</span>}</span>
-                                    </React.Fragment>
-                                ) : null;
-                            })}
-                            
                             <span className="text-gray-500">SPJ Sudah Diajukan</span>
                             <span className={`font-semibold text-right ${totalSudahDiajukan > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
                                 {totalSudahDiajukan > 0 ? formatRupiah(totalSudahDiajukan) : '—'}
                             </span>
+
+                            {/* Rincian per-TW kalau lebih dari 1 TW dipilih */}
+                            {twArr.length > 1 && twArr.map(tw => (
+                                sudahDiajukanPerTw[tw] > 0 ? (
+                                    <React.Fragment key={tw}>
+                                        <span className="text-gray-400 text-xs pl-3">↳ diajukan di {tw}</span>
+                                        <span className="text-orange-500 text-xs text-right">{formatRupiah(sudahDiajukanPerTw[tw])}</span>
+                                    </React.Fragment>
+                                ) : null
+                            ))}
                             
                             <div className="col-span-2 border-t border-dashed border-gray-300 my-0.5"></div>
                             
@@ -385,123 +452,34 @@
             );
         };
 
-        const PaguInfoCardEnhanced = ({ sekolah, rincian, triwulan, nominalInput, dataSpj }) => {
-            if (!sekolah || !rincian || !triwulan) return null;
-            
+        // Ringkasan singkat "sisa pagu setelah pengajuan ini" — dipasang tepat di bawah
+        // input Nominal, biar user langsung tahu berapa jatah yang masih tersisa buat
+        // SPJ berikutnya begitu SPJ yang sedang diketik ini disimpan.
+        const SisaSetelahPengajuan = ({ sekolah, rincian, triwulan, nominalInput, dataSpj }) => {
             const twArr = Array.isArray(triwulan) ? triwulan : (triwulan ? [triwulan] : []);
-            if (twArr.length === 0) return null;
-            
+            if (!sekolah || !rincian || twArr.length === 0) return null;
             const paguInfo = getPaguInfoEnhanced(sekolah, rincian, twArr);
-            if (!paguInfo) {
-                const num = getSchoolNumber(sekolah);
-                const isInRakData = num && RAK_DATA[num];
-                if (num && !isInRakData && window.rakDataGlobal.length === 0) {
-                    return (
-                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-600 italic flex items-center gap-2">
-                            <IconInfo size={15} className="text-blue-400 flex-shrink-0"/>
-                            <span>Info pagu akan tersedia setelah tab <strong>RAK BOSDA</strong> dibuka minimal sekali untuk memuat data.</span>
-                        </div>
-                    );
-                }
-                return (
-                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-500 italic flex items-center gap-2">
-                        <IconInfo size={15} className="text-gray-400 flex-shrink-0"/>
-                        <span>Data pagu RAK tidak ditemukan untuk kombinasi ini.</span>
-                    </div>
-                );
-            }
-            
+            if (!paguInfo) return null;
+
             const kodeBelanja = rincian.split(' ')[0];
-            const myNum = sekolah ? sekolah.match(/\b(\d+)\b/)?.[1] : null;
-            
-            const sudahDiajukanPerTw = {};
-            let totalSudahDiajukan = 0;
-            
-            twArr.forEach(twStr => {
-                const spjUntukTw = dataSpj.filter(s => {
-                    const sNum = s.sekolah ? s.sekolah.match(/\b(\d+)\b/)?.[1] : null;
-                    const sKode = s.rincian ? s.rincian.split(' ')[0] : '';
-                    const spjTw = s.triwulan || '';
-                    const twMatch = spjTw === twStr || spjTw.includes(twStr);
-                    return sNum === myNum 
-                        && sKode === kodeBelanja 
-                        && twMatch
-                        && (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair' || s.status === 'Revisi' || s.status === 'Ditunda' || s.status === 'Sudah Cair');
-                });
-                const nominal = spjUntukTw.reduce((acc, s) => acc + (Number(s.nominal) || 0), 0);
-                sudahDiajukanPerTw[twStr] = nominal;
-                totalSudahDiajukan += nominal;
+            const myNum = sekolah.match(/\b(\d+)\b/)?.[1];
+            const spjRelevan = (dataSpj || []).filter(s => {
+                const sNum = s.sekolah ? s.sekolah.match(/\b(\d+)\b/)?.[1] : null;
+                const sKode = s.rincian ? s.rincian.split(' ')[0] : '';
+                const statusValid = (s.status === 'Menunggu Verifikasi' || s.status === 'Siap Cair' || s.status === 'Revisi' || s.status === 'Ditunda' || s.status === 'Sudah Cair');
+                return sNum === myNum && sKode === kodeBelanja && statusValid;
             });
-            
-            const sisaPaguTw = paguInfo.triwulan - totalSudahDiajukan;
-            const sisaPaguTotal = paguInfo.total - totalSudahDiajukan;
+            const totalSudahDiajukan = twArr.reduce((acc, tw) => acc + spjRelevan.reduce((a, s) => a + (Number(getNominalPerTwMap(s)[tw]) || 0), 0), 0);
             const inputNominal = Number(nominalInput) || 0;
-            const twHasNoPagu = paguInfo.triwulan === 0;
-            const isOverBudget = inputNominal > 0 && (inputNominal > sisaPaguTw || inputNominal > sisaPaguTotal);
-            const isPaguHabis = !twHasNoPagu && sisaPaguTw <= 0;
-            
-            const cardBg   = isOverBudget || isPaguHabis ? 'bg-red-50 border-red-200' : twHasNoPagu ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200';
-            const headBg   = isOverBudget || isPaguHabis ? 'bg-red-100 border-red-200' : twHasNoPagu ? 'bg-amber-100 border-amber-200' : 'bg-green-100 border-green-200';
-            const headText = isOverBudget || isPaguHabis ? 'text-red-700' : twHasNoPagu ? 'text-amber-700' : 'text-green-700';
-            const HeadIcon = isOverBudget || isPaguHabis ? IconWarning : IconInfo;
-            const headIconColor = isOverBudget || isPaguHabis ? 'text-red-600' : twHasNoPagu ? 'text-amber-600' : 'text-green-600';
-            const namaSekolah = sekolah.replace('UPT SDN ', 'SDN ').replace(' GRESIK', '');
+            const sisaSebelum = paguInfo.triwulan - totalSudahDiajukan;
+            const sisaSetelah = sisaSebelum - inputNominal;
+            const habis = sisaSetelah <= 0;
             const twLabel = twArr.join(' & ');
-            
+
             return (
-                <div className={`border rounded-xl overflow-hidden shadow-sm ${cardBg}`}>
-                    <div className={`px-4 py-2.5 flex items-center gap-2 border-b ${headBg}`}>
-                        <HeadIcon size={15} className={`${headIconColor} flex-shrink-0`}/>
-                        <span className={`text-sm font-bold ${headText}`}>Info Pagu ({namaSekolah}) — {twLabel}</span>
-                    </div>
-                    <div className="px-4 py-3">
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-                            <span className="text-gray-500">Pagu Total (Setahun)</span>
-                            <span className="font-semibold text-gray-800 text-right">{formatRupiah(paguInfo.total)}</span>
-                            
-                            <span className="text-gray-500">Pagu {twLabel}</span>
-                            <span className={`font-semibold text-right ${twHasNoPagu ? 'text-amber-600 italic text-xs' : 'text-gray-800'}`}>
-                                {twHasNoPagu ? 'Tidak dianggarkan di TW ini' : formatRupiah(paguInfo.triwulan)}
-                            </span>
-                            
-                            <span className="text-gray-500">SPJ Sudah Diajukan</span>
-                            <span className={`font-semibold text-right ${totalSudahDiajukan > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
-                                {totalSudahDiajukan > 0 ? formatRupiah(totalSudahDiajukan) : '—'}
-                            </span>
-                            
-                            <div className="col-span-2 border-t border-dashed border-gray-300 my-0.5"></div>
-                            
-                            <span className="text-gray-700 font-medium">Sisa Pagu {twLabel}</span>
-                            <span className={`font-bold text-right text-base ${twHasNoPagu ? 'text-amber-600' : isPaguHabis ? 'text-red-600' : sisaPaguTw <= 0 ? 'text-red-600' : 'text-green-700'}`}>
-                                {twHasNoPagu ? '—' : isPaguHabis ? 'PAGU HABIS ✗' : formatRupiah(Math.max(0, sisaPaguTw))}
-                                {!twHasNoPagu && !isPaguHabis && sisaPaguTw > 0 && <span className="text-green-500 ml-1">✓</span>}
-                            </span>
-                            
-                            <span className="text-gray-700 font-medium">Sisa Pagu Total</span>
-                            <span className={`font-bold text-right ${sisaPaguTotal <= 0 ? 'text-red-600' : 'text-blue-700'}`}>
-                                {formatRupiah(Math.max(0, sisaPaguTotal))}
-                            </span>
-                        </div>
-                        
-                        {isPaguHabis && (
-                            <div className="mt-2.5 p-2.5 bg-red-100 rounded-lg text-red-700 text-xs font-medium flex items-start gap-1.5">
-                                <IconWarning size={13} className="flex-shrink-0 mt-0.5"/>
-                                <span><strong>Pagu {twLabel} sudah habis!</strong> SPJ untuk TW ini tidak bisa diajukan lagi. Sudah terpakai: {formatRupiah(totalSudahDiajukan)} dari {formatRupiah(paguInfo.triwulan)}.</span>
-                            </div>
-                        )}
-                        {isOverBudget && inputNominal > 0 && !isPaguHabis && (
-                            <div className="mt-2.5 p-2.5 bg-red-100 rounded-lg text-red-700 text-xs font-medium flex items-start gap-1.5">
-                                <IconWarning size={13} className="flex-shrink-0 mt-0.5"/>
-                                <span>Nominal yang diinput ({formatRupiah(inputNominal)}) <strong>melebihi sisa pagu!</strong> Sisa pagu hanya {formatRupiah(Math.max(0, sisaPaguTw))}.</span>
-                            </div>
-                        )}
-                        {twHasNoPagu && (
-                            <div className="mt-2.5 p-2.5 bg-amber-100 rounded-lg text-amber-700 text-xs font-medium flex items-start gap-1.5">
-                                <IconWarning size={13} className="flex-shrink-0 mt-0.5"/>
-                                <span>Rincian ini <strong>tidak dianggarkan</strong> pada {twLabel}. Pastikan triwulan sudah benar.</span>
-                            </div>
-                        )}
-                    </div>
+                <div className={`mt-2 flex items-center justify-between gap-2 text-xs px-2.5 py-2 rounded-lg border ${habis ? 'bg-red-50 border-red-200 text-red-600' : 'bg-blue-50 border-blue-200 text-blue-700'}`}>
+                    <span>Sisa pagu {twLabel} setelah SPJ ini:</span>
+                    <span className="font-bold whitespace-nowrap">{habis ? 'PAGU HABIS ✗' : formatRupiah(sisaSetelah)}</span>
                 </div>
             );
         };
@@ -565,7 +543,7 @@
           const [sidebarOpen, setSidebarOpen] = useState(true);
           const [dataSpjRaw, setDataSpjRaw] = useState(initialData);
           const [isLoading, setIsLoading] = useState(false);
-          const [addForm, setAddForm] = useState({ kecamatan: '', sekolah: '', rincian: '', nominal: '', triwulan: [] });
+          const [addForm, setAddForm] = useState({ kecamatan: '', sekolah: '', rincian: '', nominal: '', triwulan: [], nominalPerTw: {} });
           const [isModalOpen, setIsModalOpen] = useState(false);
           const [selectedSpj, setSelectedSpj] = useState(null);
           const [verdict, setVerdict] = useState('Siap Cair');
@@ -889,17 +867,24 @@
           const handleTriwulanChange = (nilai) => {
             setAddForm(prev => {
               const sudahAda = prev.triwulan.includes(nilai);
-              const baru = sudahAda
+              const baruTriwulan = sudahAda
                 ? prev.triwulan.filter(t => t !== nilai)
                 : [...prev.triwulan, nilai].sort();
-              return { ...prev, triwulan: baru };
+              // Nominal totalnya tetap, cuma dihitung ulang pembagian per-TW-nya:
+              // ambil dari TW paling awal dulu, sisanya baru "meluber" ke TW berikutnya.
+              const nominalPerTw = autoSplitNominalPerTw(prev.sekolah, prev.rincian, baruTriwulan, prev.nominal, dataSpj);
+              return { ...prev, triwulan: baruTriwulan, nominalPerTw };
             });
           };
 
           const handleFormChange = (e) => {
             const { name, value } = e.target;
-            let newForm = { ...addForm, [name]: value };
+            const cleanValue = name === 'nominal' ? parseRibuan(value) : value;
+            let newForm = { ...addForm, [name]: cleanValue };
             if (name === 'kecamatan') newForm.sekolah = '';
+            // Setiap kali nominal total, sekolah, atau rincian berubah, hitung ulang
+            // pembagian otomatis per triwulan (ambil dari TW paling awal dulu).
+            newForm.nominalPerTw = autoSplitNominalPerTw(newForm.sekolah, newForm.rincian, newForm.triwulan, newForm.nominal, dataSpj);
             setAddForm(newForm);
           };
 
@@ -922,9 +907,17 @@
               setIsLoading(false);
               return;
             }
+            if (!(Number(addForm.nominal) > 0)) {
+              alert('Isi nominal yang valid (lebih dari 0)!');
+              setIsLoading(false);
+              return;
+            }
             const triwulanText = addForm.triwulan.join(' & ');
             const tanggalHariIni = new Date().toISOString().split('T')[0];
             const newId = generateNewId(dataSpj);
+            const nominalPerTwBersih = {};
+            addForm.triwulan.forEach(tw => { nominalPerTwBersih[tw] = Number(addForm.nominalPerTw[tw]) || 0; });
+            const totalNominal = Number(addForm.nominal) || 0;
             const newSpj = {
               id: newId,
               tahun: selectedYear,
@@ -932,7 +925,8 @@
               pic: KECAMATAN_PIC[addForm.kecamatan],
               tanggal: tanggalHariIni,
               triwulan: triwulanText, rincian: addForm.rincian,
-              nominal: Number(addForm.nominal),
+              nominal: totalNominal,
+              nominalPerTw: nominalPerTwBersih,
               status: 'Menunggu Verifikasi',
               catatan: '-',
               riwayatRevisi: [
@@ -945,7 +939,7 @@
             };
             try {
               await db.collection("spj_bos_data").add(newSpj);
-              setAddForm({ kecamatan: '', sekolah: '', rincian: '', nominal: '', triwulan: [] });
+              setAddForm({ kecamatan: '', sekolah: '', rincian: '', nominal: '', triwulan: [], nominalPerTw: {} });
               alert('Data berhasil disimpan ke database!');
               setActiveTab('verifikasi');
               // Sinkron ke SheetBest (opsional, tidak blok kalau gagal)
@@ -1022,9 +1016,14 @@
             setIsLoading(true);
             if (!editingSpj || !editingSpj.id) { alert("Error: ID tidak ditemukan!"); setIsLoading(false); return; }
             const formData = new FormData(e.target);
+            const editedTriwulan = formData.get('triwulan');
+            const editedNominal = Number(formData.get('nominal'));
             const updatedDataPayload = {
               kecamatan: formData.get('kecamatan'), sekolah: formData.get('sekolah'),
-              triwulan: formData.get('triwulan'), nominal: Number(formData.get('nominal')),
+              triwulan: editedTriwulan, nominal: editedNominal,
+              // Modal ini cuma izinkan 1 triwulan per edit, jadi breakdown-nya sederhana:
+              // seluruh nominal yang diedit otomatis ditempatkan pada triwulan yang dipilih.
+              nominalPerTw: { [editedTriwulan]: editedNominal },
               rincian: formData.get('rincian'), pic: KECAMATAN_PIC[formData.get('kecamatan')]
             };
             try {
@@ -1267,8 +1266,20 @@
                 <div className="grid grid-cols-2 gap-4 relative z-10">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Nominal (Rp)</label>
-                    <input required name="nominal" value={addForm.nominal} onChange={handleFormChange} type="number" min="0"
-                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="10000000"/>
+                    <input required name="nominal" value={formatRibuan(addForm.nominal)} onChange={handleFormChange} type="text" inputMode="numeric"
+                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="10.000.000"/>
+                    {addForm.triwulan.length > 1 && (
+                      <div className="mt-2 border border-gray-200 rounded-lg p-2.5 bg-gray-50 space-y-1">
+                        <p className="text-[11px] text-gray-400 mb-1">Diambil habis dari TW paling awal dulu, sisanya baru ke TW berikutnya:</p>
+                        {addForm.triwulan.map(tw => (
+                          <div key={tw} className="flex items-center justify-between text-xs">
+                            <span className="text-gray-500">{tw}</span>
+                            <span className="font-semibold text-gray-700">{formatRupiah(Number(addForm.nominalPerTw[tw]) || 0)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <SisaSetelahPengajuan sekolah={addForm.sekolah} rincian={addForm.rincian} triwulan={addForm.triwulan} nominalInput={addForm.nominal} dataSpj={dataSpj}/>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Triwulan Pelaksanaan</label>
@@ -2344,9 +2355,10 @@
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Nominal (Rp)</label>
-                          <input required name="nominal" type="number" value={editingSpj.nominal}
-                            onChange={(e) => setEditingSpj({...editingSpj, nominal: e.target.value})}
+                          <input required name="nominal" type="text" inputMode="numeric" value={formatRibuan(editingSpj.nominal)}
+                            onChange={(e) => setEditingSpj({...editingSpj, nominal: parseRibuan(e.target.value)})}
                             className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"/>
+                          <SisaSetelahPengajuan sekolah={editingSpj.sekolah} rincian={editingSpj.rincian} triwulan={editingSpj.triwulan} nominalInput={editingSpj.nominal} dataSpj={dataSpj}/>
                         </div>
                       </div>
                       <div className="relative z-20">
