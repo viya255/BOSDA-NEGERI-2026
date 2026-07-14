@@ -2007,7 +2007,7 @@
                     {guKeys.map(gu => {
                       const listSpj = grouped[gu];
                       const totalGu = listSpj.reduce((a, s) => a + (Number(s.nominal) || 0), 0);
-                      const isOpen = expandedGu[gu] !== false; // default terbuka
+                      const isOpen = expandedGu[gu] === true; // default tertutup
                       return (
                         <div key={gu} className="bg-white rounded-xl border border-teal-100 shadow-sm overflow-hidden">
                           <div onClick={() => toggleGu(gu)} className="flex items-center justify-between px-5 py-4 bg-teal-50 cursor-pointer hover:bg-teal-100 transition">
