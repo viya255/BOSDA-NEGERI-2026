@@ -1025,7 +1025,10 @@
             if (!editingSpj || !editingSpj.id) { alert("Error: ID tidak ditemukan!"); setIsLoading(false); return; }
             const formData = new FormData(e.target);
             const editedTriwulan = formData.get('triwulan');
-            const editedNominal = Number(formData.get('nominal'));
+            // PENTING: jangan ambil nominal dari formData.get('nominal') — nilai tampilan di input itu
+            // sudah diformat pakai titik ribuan (misal "3.338.000"), dan Number("3.338.000") akan jadi NaN.
+            // Ambil dari editingSpj.nominal (sudah dibersihkan dari titik lewat parseRibuan tiap kali diketik).
+            const editedNominal = Number(editingSpj.nominal) || 0;
             const updatedDataPayload = {
               kecamatan: formData.get('kecamatan'), sekolah: formData.get('sekolah'),
               triwulan: editedTriwulan, nominal: editedNominal,
