@@ -1071,8 +1071,18 @@
           // Dicocokkan berdasarkan: Nama Sekolah + Nilai Ajuan (nominal) + Kode Belanja (kalau ada, untuk disambiguasi)
           const guUploadInputRef = useRef(null);
           const [guUploadResult, setGuUploadResult] = useState(null); // {matched, notFound, ambiguous, totalRow}
+          const [lastUploadBaris, setLastUploadBaris] = useState(null); // simpan hasil parsing terakhir untuk fitur refresh
           const [showAllNotFound, setShowAllNotFound] = useState(false);
           const [showAllAmbiguous, setShowAllAmbiguous] = useState(false);
+          const [guPanelCollapsed, setGuPanelCollapsed] = useState(false); // true = diringkas (tutup), data tetap ada
+
+          const hapusPilihanUpload = () => {
+            if (!window.confirm('Batalkan semua centang hasil upload file ini? Ceklisan akan dikosongkan.')) return;
+            setSelectedForCair({});
+            setGuUploadResult(null);
+            setLastUploadBaris(null);
+            setGuPanelCollapsed(false);
+          };
 
           const parseNominalFleksibel = (v) => {
             if (v === null || v === undefined) return 0;
@@ -1089,73 +1099,79 @@
             return digits ? digits.slice(-4) : '';
           };
 
+          // Fungsi bersama: terima daftar "baris" hasil parsing, cocokkan ke SPJ Siap Cair, lalu ceklis otomatis
+          // Dipakai baik oleh upload file baru maupun tombol "Refresh" (mencocokkan ulang ke data terkini tanpa upload ulang)
+          const cocokkanDanCeklis = (baris) => {
+            if (!baris.length) { alert('Tidak ada baris data valid (Nama Sekolah + Nilai Ajuan) yang terbaca dari file ini.'); return; }
+            setLastUploadBaris(baris);
+
+            const kandidat = dataSpj.filter(s => s.status === 'Siap Cair').map(s => ({
+              spj: s,
+              sekolahNum: ekstrakNomorSekolah(s.sekolah),
+              nominal: Number(s.nominal) || 0,
+              kode4: ekstrak4DigitKode(String(s.rincian || '').split(' ')[0]),
+            }));
+
+            // Kandidat dari SEMUA status, dipakai khusus untuk cari tahu kenapa suatu baris tidak ketemu di Siap Cair
+            const kandidatSemua = dataSpj.map(s => ({
+              spj: s,
+              sekolahNum: ekstrakNomorSekolah(s.sekolah),
+              nominal: Number(s.nominal) || 0,
+            }));
+
+            const sudahDipakai = new Set();
+            const matched = [];
+            const notFound = [];
+            const ambiguous = [];
+
+            baris.forEach(b => {
+              let opsi = kandidat.filter(k =>
+                k.sekolahNum === b.sekolahNum && k.nominal === b.nominal && !sudahDipakai.has(k.spj.id)
+              );
+              if (opsi.length > 1 && b.kode4) {
+                const opsiSempit = opsi.filter(k => k.kode4 === b.kode4);
+                if (opsiSempit.length >= 1) opsi = opsiSempit;
+              }
+              if (opsi.length === 1) {
+                sudahDipakai.add(opsi[0].spj.id);
+                matched.push(opsi[0].spj.id);
+              } else if (opsi.length === 0) {
+                // Cari tahu SPJ ini sekarang statusnya apa (kalau ada di sistem tapi bukan Siap Cair)
+                const lain = kandidatSemua.find(k => k.sekolahNum === b.sekolahNum && k.nominal === b.nominal);
+                let statusLain = null;
+                let spjIdLain = null;
+                if (lain) {
+                  spjIdLain = lain.spj.id;
+                  if (lain.spj.status === 'Siap Cair' && sudahDipakai.has(lain.spj.id)) {
+                    // Item ini SEBENARNYA Siap Cair, tapi sudah "dipakai" oleh baris lain di file yang sama (duplikat)
+                    statusLain = 'DUPLIKAT_DI_FILE';
+                  } else {
+                    statusLain = lain.spj.status === 'Sudah Cair' && lain.spj.gu
+                      ? `Sudah Cair (${lain.spj.gu})`
+                      : lain.spj.status;
+                  }
+                }
+                notFound.push({ sekolahRaw: b.sekolahRaw, nominal: b.nominal, statusLain, spjIdLain });
+              } else {
+                ambiguous.push({ sekolahRaw: b.sekolahRaw, nominal: b.nominal, jumlahOpsi: opsi.length });
+              }
+            });
+
+            const updated = {};
+            matched.forEach(id => { updated[id] = true; });
+            setSelectedForCair(updated);
+            setGuUploadResult({ matched: matched.length, notFound, ambiguous, totalRow: baris.length });
+          };
+
+          const refreshHasilUpload = () => {
+            if (lastUploadBaris && lastUploadBaris.length) cocokkanDanCeklis(lastUploadBaris);
+          };
+
           const handleUploadGuExcel = (e) => {
             const file = e.target.files && e.target.files[0];
             if (!file) return;
             const namaFile = file.name.toLowerCase();
             const isPdf = namaFile.endsWith('.pdf');
-
-            // Fungsi bersama: terima daftar "baris" hasil parsing, cocokkan ke SPJ Siap Cair, lalu ceklis otomatis
-            const cocokkanDanCeklis = (baris) => {
-              if (!baris.length) { alert('Tidak ada baris data valid (Nama Sekolah + Nilai Ajuan) yang terbaca dari file ini.'); return; }
-
-              const kandidat = dataSpj.filter(s => s.status === 'Siap Cair').map(s => ({
-                spj: s,
-                sekolahNum: ekstrakNomorSekolah(s.sekolah),
-                nominal: Number(s.nominal) || 0,
-                kode4: ekstrak4DigitKode(String(s.rincian || '').split(' ')[0]),
-              }));
-
-              // Kandidat dari SEMUA status, dipakai khusus untuk cari tahu kenapa suatu baris tidak ketemu di Siap Cair
-              const kandidatSemua = dataSpj.map(s => ({
-                spj: s,
-                sekolahNum: ekstrakNomorSekolah(s.sekolah),
-                nominal: Number(s.nominal) || 0,
-              }));
-
-              const sudahDipakai = new Set();
-              const matched = [];
-              const notFound = [];
-              const ambiguous = [];
-
-              baris.forEach(b => {
-                let opsi = kandidat.filter(k =>
-                  k.sekolahNum === b.sekolahNum && k.nominal === b.nominal && !sudahDipakai.has(k.spj.id)
-                );
-                if (opsi.length > 1 && b.kode4) {
-                  const opsiSempit = opsi.filter(k => k.kode4 === b.kode4);
-                  if (opsiSempit.length >= 1) opsi = opsiSempit;
-                }
-                if (opsi.length === 1) {
-                  sudahDipakai.add(opsi[0].spj.id);
-                  matched.push(opsi[0].spj.id);
-                } else if (opsi.length === 0) {
-                  // Cari tahu SPJ ini sekarang statusnya apa (kalau ada di sistem tapi bukan Siap Cair)
-                  const lain = kandidatSemua.find(k => k.sekolahNum === b.sekolahNum && k.nominal === b.nominal);
-                  let statusLain = null;
-                  let spjIdLain = null;
-                  if (lain) {
-                    spjIdLain = lain.spj.id;
-                    if (lain.spj.status === 'Siap Cair' && sudahDipakai.has(lain.spj.id)) {
-                      // Item ini SEBENARNYA Siap Cair, tapi sudah "dipakai" oleh baris lain di file yang sama (duplikat)
-                      statusLain = 'DUPLIKAT_DI_FILE';
-                    } else {
-                      statusLain = lain.spj.status === 'Sudah Cair' && lain.spj.gu
-                        ? `Sudah Cair (${lain.spj.gu})`
-                        : lain.spj.status;
-                    }
-                  }
-                  notFound.push({ sekolahRaw: b.sekolahRaw, nominal: b.nominal, statusLain, spjIdLain });
-                } else {
-                  ambiguous.push({ sekolahRaw: b.sekolahRaw, nominal: b.nominal, jumlahOpsi: opsi.length });
-                }
-              });
-
-              const updated = {};
-              matched.forEach(id => { updated[id] = true; });
-              setSelectedForCair(updated);
-              setGuUploadResult({ matched: matched.length, notFound, ambiguous, totalRow: baris.length });
-            };
 
             // ---- Jalur PDF ----
             if (isPdf) {
@@ -2121,8 +2137,13 @@
                             <span className="text-orange-600"> • {guUploadResult.ambiguous.length} baris cocok ganda (perlu dicentang manual)</span>
                           )}
                           {' '}
-                          <button onClick={() => setGuUploadResult(null)} className="text-gray-400 hover:text-gray-600 underline ml-1">tutup</button>
+                          <button onClick={refreshHasilUpload} className="text-teal-600 hover:text-teal-800 font-semibold underline ml-2">🔄 refresh</button>
+                          <button onClick={() => setGuPanelCollapsed(v => !v)} className="text-gray-400 hover:text-gray-600 underline ml-2">
+                            {guPanelCollapsed ? 'buka detail' : 'tutup'}
+                          </button>
+                          <button onClick={hapusPilihanUpload} className="text-red-500 hover:text-red-700 underline ml-2">🗑️ hapus pilihan upload</button>
                         </p>
+                        {!guPanelCollapsed && <>
                         {guUploadResult.notFound.length > 0 && (() => {
                           const grup = kelompokkanNotFound(guUploadResult.notFound);
                           const kategoriInfo = [
@@ -2177,6 +2198,7 @@
                             )}
                           </div>
                         )}
+                        </>}
                       </div>
                     )}
                   </div>
