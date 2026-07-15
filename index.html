@@ -1029,6 +1029,8 @@
             // sudah diformat pakai titik ribuan (misal "3.338.000"), dan Number("3.338.000") akan jadi NaN.
             // Ambil dari editingSpj.nominal (sudah dibersihkan dari titik lewat parseRibuan tiap kali diketik).
             const editedNominal = Number(editingSpj.nominal) || 0;
+            const editedStatus = formData.get('status');
+            const statusBerubah = editedStatus && editedStatus !== editingSpj.status;
             const updatedDataPayload = {
               kecamatan: formData.get('kecamatan'), sekolah: formData.get('sekolah'),
               triwulan: editedTriwulan, nominal: editedNominal,
@@ -1037,17 +1039,40 @@
               nominalPerTw: { [editedTriwulan]: editedNominal },
               rincian: formData.get('rincian'), pic: KECAMATAN_PIC[formData.get('kecamatan')]
             };
+            if (statusBerubah) {
+              updatedDataPayload.status = editedStatus;
+              // Kalau ditarik keluar dari "Sudah Cair", bersihkan info GU/tanggal cair
+              // supaya tidak nyangkut lagi di grup GU manapun di tab Sudah Cair.
+              if (editingSpj.status === 'Sudah Cair' && editedStatus !== 'Sudah Cair') {
+                updatedDataPayload.gu = firebase.firestore.FieldValue.delete();
+                updatedDataPayload.tanggalCair = firebase.firestore.FieldValue.delete();
+              }
+              const today = new Date().toISOString().split('T')[0];
+              const riwayatBaru = [...(editingSpj.riwayatRevisi || []), { tanggal: today, status: editedStatus, catatan: `Status diubah manual dari ${editingSpj.status} menjadi ${editedStatus} lewat Edit` }];
+              updatedDataPayload.riwayatRevisi = riwayatBaru;
+            }
             try {
               if (editingSpj._docId) {
                 await db.collection("spj_bos_data").doc(editingSpj._docId).update(updatedDataPayload);
               }
               alert('Berhasil diperbarui!');
-              setDataSpjRaw(prev => prev.map(spj => spj.id === editingSpj.id ? { ...spj, ...updatedDataPayload } : spj));
+              setDataSpjRaw(prev => prev.map(spj => {
+                if (spj.id !== editingSpj.id) return spj;
+                const merged = { ...spj, ...updatedDataPayload };
+                if (statusBerubah && editingSpj.status === 'Sudah Cair' && editedStatus !== 'Sudah Cair') {
+                  delete merged.gu; delete merged.tanggalCair;
+                }
+                return merged;
+              }));
               setIsEditModalOpen(false); setEditingSpj(null);
               // Sinkron ke SheetBest (opsional)
               try {
+                const payloadSync = {...updatedDataPayload, _method: 'PATCH', _id: editingSpj.id};
+                if (statusBerubah && editingSpj.status === 'Sudah Cair' && editedStatus !== 'Sudah Cair') {
+                  payloadSync.gu = ''; payloadSync.tanggalCair = '';
+                }
                 await fetch(`https://script.google.com/macros/s/AKfycbw7Bg-nPUQxOtyWJgUQKp0VaSE4SadAXr-iqkJLjSjiuR_jAtZsEHrxAk7SXnf42Hleqw/exec?id=${editingSpj.id}`, {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({...updatedDataPayload, _method: 'PATCH', _id: editingSpj.id}),
+                  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payloadSync),
                 });
               } catch (sheetErr) {
                 console.warn('SheetBest sync gagal (data sudah diupdate di Firestore):', sheetErr.message);
@@ -2760,6 +2785,21 @@
                           onChange={(e) => setEditingSpj({...editingSpj, rincian: e.target.value})}
                           options={RINCIAN_OPTIONS}
                           className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500" required/>
+                      </div>
+                      <div className="border-t pt-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Status SPJ</label>
+                        <select name="status" value={editingSpj.status}
+                          onChange={(e) => setEditingSpj({...editingSpj, status: e.target.value})}
+                          className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                          <option value="Menunggu Verifikasi">Menunggu Verifikasi (Antrian Verifikasi)</option>
+                          <option value="Siap Cair">Siap Cair (Antrian Siap Cair)</option>
+                          <option value="Revisi">Revisi (Perlu Revisi)</option>
+                          <option value="Ditunda">Ditunda (SPJ Ditunda)</option>
+                          <option value="Sudah Cair">Sudah Cair</option>
+                        </select>
+                        {editingSpj.status === 'Sudah Cair' && (
+                          <p className="text-xs text-orange-600 mt-1">⚠️ Kalau status diubah dari "Sudah Cair" ke status lain, data GU dan tanggal cair akan dihapus dan SPJ ini keluar dari grup GU-nya.</p>
+                        )}
                       </div>
                       <div className="flex justify-end space-x-2 pt-4 border-t">
                         <button type="button" onClick={() => setIsEditModalOpen(false)} disabled={isLoading}
