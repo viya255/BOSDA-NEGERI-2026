@@ -11,6 +11,13 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/build/pdf.min.js"></script>
+    <script>
+      if (window.pdfjsLib) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/build/pdf.worker.min.js";
+      }
+    </script>
     <script>
   const firebaseConfig = {
     apiKey: "AIzaSyCz8OHlSJTpiNbh-Czmhe0drYdCThEN-Rs",
@@ -215,6 +222,7 @@
         const IconTrash = ({size=20, className=""}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>;
         const IconChevronDown = ({size=20, className=""}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>;
         const IconDownload = ({size=20, className=""}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>;
+        const IconUpload = ({size=20, className=""}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>;
         const IconInfo = ({size=20, className=""}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>;
         const IconWarning = ({size=20, className=""}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>;
         const IconWifi = ({size=20, className=""}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/></svg>;
@@ -1059,7 +1067,217 @@
             setSelectedForCair(updated);
           };
 
+          // BARU: Upload Excel untuk auto-ceklis SPJ yang masuk GU tertentu
+          // Dicocokkan berdasarkan: Nama Sekolah + Nilai Ajuan (nominal) + Kode Belanja (kalau ada, untuk disambiguasi)
+          const guUploadInputRef = useRef(null);
+          const [guUploadResult, setGuUploadResult] = useState(null); // {matched, notFound, ambiguous, totalRow}
+          const [showAllNotFound, setShowAllNotFound] = useState(false);
+          const [showAllAmbiguous, setShowAllAmbiguous] = useState(false);
+
+          const parseNominalFleksibel = (v) => {
+            if (v === null || v === undefined) return 0;
+            if (typeof v === 'number') return Math.round(v);
+            const digits = String(v).replace(/[^\d]/g, '');
+            return digits ? parseInt(digits, 10) : 0;
+          };
+          const ekstrakNomorSekolah = (s) => {
+            const m = String(s || '').match(/\d+/);
+            return m ? m[0] : '';
+          };
+          const ekstrak4DigitKode = (s) => {
+            const digits = String(s || '').replace(/[^\d]/g, '');
+            return digits ? digits.slice(-4) : '';
+          };
+
+          const handleUploadGuExcel = (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            const namaFile = file.name.toLowerCase();
+            const isPdf = namaFile.endsWith('.pdf');
+
+            // Fungsi bersama: terima daftar "baris" hasil parsing, cocokkan ke SPJ Siap Cair, lalu ceklis otomatis
+            const cocokkanDanCeklis = (baris) => {
+              if (!baris.length) { alert('Tidak ada baris data valid (Nama Sekolah + Nilai Ajuan) yang terbaca dari file ini.'); return; }
+
+              const kandidat = dataSpj.filter(s => s.status === 'Siap Cair').map(s => ({
+                spj: s,
+                sekolahNum: ekstrakNomorSekolah(s.sekolah),
+                nominal: Number(s.nominal) || 0,
+                kode4: ekstrak4DigitKode(String(s.rincian || '').split(' ')[0]),
+              }));
+
+              // Kandidat dari SEMUA status, dipakai khusus untuk cari tahu kenapa suatu baris tidak ketemu di Siap Cair
+              const kandidatSemua = dataSpj.map(s => ({
+                spj: s,
+                sekolahNum: ekstrakNomorSekolah(s.sekolah),
+                nominal: Number(s.nominal) || 0,
+              }));
+
+              const sudahDipakai = new Set();
+              const matched = [];
+              const notFound = [];
+              const ambiguous = [];
+
+              baris.forEach(b => {
+                let opsi = kandidat.filter(k =>
+                  k.sekolahNum === b.sekolahNum && k.nominal === b.nominal && !sudahDipakai.has(k.spj.id)
+                );
+                if (opsi.length > 1 && b.kode4) {
+                  const opsiSempit = opsi.filter(k => k.kode4 === b.kode4);
+                  if (opsiSempit.length >= 1) opsi = opsiSempit;
+                }
+                if (opsi.length === 1) {
+                  sudahDipakai.add(opsi[0].spj.id);
+                  matched.push(opsi[0].spj.id);
+                } else if (opsi.length === 0) {
+                  // Cari tahu SPJ ini sekarang statusnya apa (kalau ada di sistem tapi bukan Siap Cair)
+                  const lain = kandidatSemua.find(k => k.sekolahNum === b.sekolahNum && k.nominal === b.nominal);
+                  let statusLain = null;
+                  let spjIdLain = null;
+                  if (lain) {
+                    spjIdLain = lain.spj.id;
+                    if (lain.spj.status === 'Siap Cair' && sudahDipakai.has(lain.spj.id)) {
+                      // Item ini SEBENARNYA Siap Cair, tapi sudah "dipakai" oleh baris lain di file yang sama (duplikat)
+                      statusLain = 'DUPLIKAT_DI_FILE';
+                    } else {
+                      statusLain = lain.spj.status === 'Sudah Cair' && lain.spj.gu
+                        ? `Sudah Cair (${lain.spj.gu})`
+                        : lain.spj.status;
+                    }
+                  }
+                  notFound.push({ sekolahRaw: b.sekolahRaw, nominal: b.nominal, statusLain, spjIdLain });
+                } else {
+                  ambiguous.push({ sekolahRaw: b.sekolahRaw, nominal: b.nominal, jumlahOpsi: opsi.length });
+                }
+              });
+
+              const updated = {};
+              matched.forEach(id => { updated[id] = true; });
+              setSelectedForCair(updated);
+              setGuUploadResult({ matched: matched.length, notFound, ambiguous, totalRow: baris.length });
+            };
+
+            // ---- Jalur PDF ----
+            if (isPdf) {
+              if (!window.pdfjsLib) { alert('Modul pembaca PDF belum siap, coba lagi sebentar lagi.'); e.target.value = ''; return; }
+              const reader = new FileReader();
+              reader.onload = async (evt) => {
+                try {
+                  const pdf = await pdfjsLib.getDocument({ data: evt.target.result }).promise;
+                  let fullText = '';
+                  for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    fullText += content.items.map(it => it.str).join(' ') + ' ';
+                  }
+                  // Regex 1 baris tabel: No No2 KodeUnit "UPT ... <angka> GRESIK" Kecamatan Rp<nominal> <kode.belanja> <keterangan> <BULAN>
+                  const BULAN = 'JANUARI|FEBRUARI|MARET|APRIL|MEI|JUNI|JULI|AGUSTUS|SEPTEMBER|OKTOBER|NOVEMBER|DESEMBER';
+                  const rowRegex = new RegExp(
+                    '\\d+\\s+\\d+\\s+\\d{3,4}\\s+((?:UPT|SMP|SMA|SMK|TK|PAUD|SLB)[A-Za-z.\\s]*?\\d+\\s+GRESIK)\\s+(.*?)\\s*Rp\\s?([\\d.,]+)\\s+(\\d{2}\\.\\d{3}\\.\\d{5})\\s+(.*?)\\s+(?:' + BULAN + ')\\b',
+                    'gi'
+                  );
+                  const baris = [];
+                  let m;
+                  while ((m = rowRegex.exec(fullText)) !== null) {
+                    const sekolahRaw = m[1].trim();
+                    baris.push({
+                      sekolahNum: ekstrakNomorSekolah(sekolahRaw),
+                      sekolahRaw,
+                      nominal: parseNominalFleksibel(m[3]),
+                      kode4: ekstrak4DigitKode(m[4]),
+                    });
+                  }
+                  cocokkanDanCeklis(baris.filter(b => b.sekolahNum && b.nominal > 0));
+                } catch (err) {
+                  console.error(err);
+                  alert('Gagal membaca file PDF: ' + err.message + '. Coba gunakan file Excel jika hasil PDF sulit terbaca (tabel PDF hasil scan/gambar tidak bisa dibaca).');
+                } finally {
+                  e.target.value = '';
+                }
+              };
+              reader.readAsArrayBuffer(file);
+              return;
+            }
+
+            // ---- Jalur Excel / CSV ----
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+              try {
+                const wb = XLSX.read(evt.target.result, { type: 'array' });
+                const sheet = wb.Sheets[wb.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+                if (!rows.length) { alert('File kosong atau formatnya tidak terbaca.'); return; }
+
+                const headers = Object.keys(rows[0]);
+                const cariKolom = (keywords) => headers.find(h => keywords.some(k => h.toLowerCase().includes(k)));
+                const colSekolah = cariKolom(['nama sekolah', 'sekolah']);
+                const colNominal = cariKolom(['nilai ajuan', 'nominal', 'nilai']);
+                const colKode = cariKolom(['kode belanja']);
+
+                if (!colSekolah || !colNominal) {
+                  alert('Tidak menemukan kolom "Nama Sekolah" dan/atau "Nilai Ajuan" di file ini. Pastikan header kolomnya ada.');
+                  return;
+                }
+
+                const baris = rows
+                  .map(r => ({
+                    sekolahNum: ekstrakNomorSekolah(r[colSekolah]),
+                    sekolahRaw: String(r[colSekolah] || '').trim(),
+                    nominal: parseNominalFleksibel(r[colNominal]),
+                    kode4: colKode ? ekstrak4DigitKode(r[colKode]) : '',
+                  }))
+                  .filter(b => b.sekolahNum && b.nominal > 0);
+
+                cocokkanDanCeklis(baris);
+              } catch (err) {
+                console.error(err);
+                alert('Gagal membaca file: ' + err.message);
+              } finally {
+                e.target.value = '';
+              }
+            };
+            reader.readAsArrayBuffer(file);
+          };
+
+          // BARU: klik item "tidak ketemu" untuk langsung loncat ke tab & SPJ yang bersangkutan
+          const STATUS_KE_TAB = {
+            'Menunggu Verifikasi': 'verifikasi',
+            'Revisi': 'revisi',
+            'Ditunda': 'ditunda',
+            'Siap Cair': 'siapCair',
+          };
+          const gotoNotFoundItem = (item) => {
+            if (!item.spjIdLain) return;
+            if (item.statusLain === 'DUPLIKAT_DI_FILE') {
+              setActiveTab('siapCair');
+              setSearchQuery(item.spjIdLain);
+              return;
+            }
+            if (item.statusLain && item.statusLain.startsWith('Sudah Cair')) {
+              setActiveTab('sudahCair');
+              setSearchQuery(item.spjIdLain);
+              return;
+            }
+            const tujuanTab = STATUS_KE_TAB[item.statusLain];
+            if (tujuanTab) setActiveTab(tujuanTab);
+            setSearchQuery(item.spjIdLain);
+          };
+
           const jumlahTerpilih = Object.values(selectedForCair).filter(Boolean).length;
+
+          // BARU: kelompokkan baris "tidak ketemu" berdasarkan kategori statusnya
+          const kelompokkanNotFound = (list) => {
+            const grup = { sudahCair: [], revisi: [], ditunda: [], verifikasi: [], duplikat: [], tidakDitemukan: [] };
+            list.forEach(n => {
+              if (n.statusLain === 'DUPLIKAT_DI_FILE') grup.duplikat.push(n);
+              else if (n.statusLain && n.statusLain.startsWith('Sudah Cair')) grup.sudahCair.push(n);
+              else if (n.statusLain === 'Revisi') grup.revisi.push(n);
+              else if (n.statusLain === 'Ditunda') grup.ditunda.push(n);
+              else if (n.statusLain === 'Menunggu Verifikasi') grup.verifikasi.push(n);
+              else grup.tidakDitemukan.push(n);
+            });
+            return grup;
+          };
 
           const openCairModal = () => {
             if (jumlahTerpilih === 0) { alert('Pilih minimal 1 SPJ terlebih dahulu!'); return; }
@@ -1870,18 +2088,97 @@
 
                 {/* BARU: Bar aksi pencairan, khusus tab Siap Cair */}
                 {isSiapCairTab && !isViewOnly && (
-                  <div className="mb-4 bg-teal-50 border border-teal-200 p-4 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-sm">
-                    <div className="flex items-center gap-2">
-                      <IconWallet size={18} className="text-teal-600"/>
-                      <p className="text-sm text-teal-800">
-                        <span className="font-bold">{jumlahTerpilih}</span> SPJ terpilih untuk dicairkan.
-                        {jumlahTerpilih === 0 && <span className="text-teal-500"> Centang SPJ pada tabel di bawah, lalu klik "Cairkan ke GU".</span>}
-                      </p>
+                  <div className="mb-4 bg-teal-50 border border-teal-200 p-4 rounded-xl shadow-sm">
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <IconWallet size={18} className="text-teal-600"/>
+                        <p className="text-sm text-teal-800">
+                          <span className="font-bold">{jumlahTerpilih}</span> SPJ terpilih untuk dicairkan.
+                          {jumlahTerpilih === 0 && <span className="text-teal-500"> Centang SPJ pada tabel di bawah, atau upload Excel untuk ceklis otomatis.</span>}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <input type="file" ref={guUploadInputRef} onChange={handleUploadGuExcel} accept=".xlsx,.xls,.csv,.pdf" className="hidden"/>
+                        <button onClick={() => guUploadInputRef.current && guUploadInputRef.current.click()}
+                          className="px-4 py-2 rounded-lg text-sm font-bold flex items-center shadow-sm transition bg-white border border-teal-300 text-teal-700 hover:bg-teal-50">
+                          <IconUpload size={16} className="mr-2"/> Upload File GU (Excel/PDF)
+                        </button>
+                        <button onClick={openCairModal} disabled={jumlahTerpilih === 0}
+                          className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center shadow-md transition ${jumlahTerpilih === 0 ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700 text-white'}`}>
+                          <IconWallet size={16} className="mr-2"/> Cairkan ke GU ({jumlahTerpilih})
+                        </button>
+                      </div>
                     </div>
-                    <button onClick={openCairModal} disabled={jumlahTerpilih === 0}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center shadow-md transition ${jumlahTerpilih === 0 ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700 text-white'}`}>
-                      <IconWallet size={16} className="mr-2"/> Cairkan ke GU ({jumlahTerpilih})
-                    </button>
+                    {guUploadResult && (
+                      <div className="mt-3 pt-3 border-t border-teal-200 text-xs">
+                        <p className="text-teal-800">
+                          📄 Dari <span className="font-bold">{guUploadResult.totalRow}</span> baris di file:{' '}
+                          <span className="font-bold text-teal-700">{guUploadResult.matched} SPJ berhasil dicentang otomatis</span>
+                          {guUploadResult.notFound.length > 0 && (
+                            <span className="text-red-600"> • {guUploadResult.notFound.length} baris tidak ketemu di daftar Siap Cair</span>
+                          )}
+                          {guUploadResult.ambiguous.length > 0 && (
+                            <span className="text-orange-600"> • {guUploadResult.ambiguous.length} baris cocok ganda (perlu dicentang manual)</span>
+                          )}
+                          {' '}
+                          <button onClick={() => setGuUploadResult(null)} className="text-gray-400 hover:text-gray-600 underline ml-1">tutup</button>
+                        </p>
+                        {guUploadResult.notFound.length > 0 && (() => {
+                          const grup = kelompokkanNotFound(guUploadResult.notFound);
+                          const kategoriInfo = [
+                            { key: 'sudahCair', label: '✅ Sudah Cair sebelumnya', color: 'text-teal-700', bg: 'bg-teal-50 border-teal-200' },
+                            { key: 'revisi', label: '🔴 Sedang Revisi', color: 'text-red-700', bg: 'bg-red-50 border-red-200' },
+                            { key: 'ditunda', label: '🟠 Ditunda', color: 'text-orange-700', bg: 'bg-orange-50 border-orange-200' },
+                            { key: 'verifikasi', label: '🟡 Menunggu Verifikasi', color: 'text-yellow-700', bg: 'bg-yellow-50 border-yellow-200' },
+                            { key: 'duplikat', label: '📋 Duplikat di file Anda', color: 'text-gray-700', bg: 'bg-gray-50 border-gray-200' },
+                            { key: 'tidakDitemukan', label: '❓ Tidak ditemukan di sistem', color: 'text-red-800', bg: 'bg-red-100 border-red-300' },
+                          ];
+                          const batas = showAllNotFound ? 9999 : 9;
+                          const adaYangDipotong = kategoriInfo.some(k => grup[k.key].length > batas);
+                          return (
+                            <div className="mt-2">
+                              <p className="font-semibold text-red-600 mb-1">Tidak ketemu di Siap Cair ({guUploadResult.notFound.length} baris) — klik untuk loncat ke SPJ-nya:</p>
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                                {kategoriInfo.filter(k => grup[k.key].length > 0).map(k => (
+                                  <div key={k.key} className={`border rounded-lg p-2 ${k.bg}`}>
+                                    <p className={`font-bold text-xs mb-1 ${k.color}`}>{k.label} ({grup[k.key].length})</p>
+                                    <div className="space-y-0.5">
+                                      {grup[k.key].slice(0, batas).map((n, i) => (
+                                        <p key={i} className={`text-xs ${n.spjIdLain ? 'cursor-pointer hover:underline' : ''} ${k.color}`}
+                                          onClick={() => gotoNotFoundItem(n)}>
+                                          • {n.sekolahRaw} ({formatRupiah(n.nominal)}){n.spjIdLain ? ` (${n.spjIdLain}) →` : ''}
+                                        </p>
+                                      ))}
+                                      {grup[k.key].length > batas && (
+                                        <p className={`text-xs italic ${k.color}`}>+{grup[k.key].length - batas} lainnya di kategori ini</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              {adaYangDipotong && (
+                                <button onClick={() => setShowAllNotFound(v => !v)} className="mt-2 font-bold underline text-red-600 hover:text-red-800 text-xs">
+                                  {showAllNotFound ? '▲ Sembunyikan sebagian' : '▼ Tampilkan semua baris di tiap kategori'}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })()}
+                        {guUploadResult.ambiguous.length > 0 && (
+                          <div className="text-orange-500 mt-1 space-y-0.5">
+                            <p className="font-semibold">Cocok ganda (perlu dicentang manual):</p>
+                            {(showAllAmbiguous ? guUploadResult.ambiguous : guUploadResult.ambiguous.slice(0, 15)).map((n, i) => (
+                              <p key={i}>• {n.sekolahRaw} ({formatRupiah(n.nominal)}) — {n.jumlahOpsi} opsi cocok</p>
+                            ))}
+                            {guUploadResult.ambiguous.length > 15 && (
+                              <button onClick={() => setShowAllAmbiguous(v => !v)} className="font-bold underline text-orange-600 hover:text-orange-800">
+                                {showAllAmbiguous ? '▲ Sembunyikan' : `▼ Tampilkan ${guUploadResult.ambiguous.length - 15} baris lainnya`}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
