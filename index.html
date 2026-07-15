@@ -1167,6 +1167,44 @@
             if (lastUploadBaris && lastUploadBaris.length) cocokkanDanCeklis(lastUploadBaris);
           };
 
+          // BARU: verifikasi massal — pindahkan banyak SPJ dari Revisi/Ditunda/Menunggu Verifikasi ke Siap Cair sekaligus,
+          // TANPA modal satu-satu. Dipakai dari panel hasil upload untuk SPJ yang sudah cocok dengan file rekap GU.
+          const [prosesVerifikasiMassal, setProsesVerifikasiMassal] = useState(false);
+          const verifikasiMassal = async (items, statusAsal) => {
+            const idList = [...new Set(items.map(n => n.spjIdLain).filter(Boolean))];
+            if (!idList.length) return;
+            const konfirmasi = window.confirm(
+              `Anda akan mengubah ${idList.length} SPJ berstatus "${statusAsal}" menjadi "Siap Cair" SEKALIGUS, tanpa membuka & meninjau alasan ${statusAsal.toLowerCase()}-nya satu per satu.\n\n` +
+              `Pakai ini hanya kalau Anda sudah yakin — misalnya karena semuanya sudah cocok persis dengan file rekap GU yang baru saja diupload.\n\nLanjutkan?`
+            );
+            if (!konfirmasi) return;
+
+            setProsesVerifikasiMassal(true);
+            const today = new Date().toISOString().split('T')[0];
+            const catatanMassal = `Diverifikasi massal ke Siap Cair via pencocokan file upload GU (${today})`;
+            try {
+              const batch = db.batch();
+              const idsBerhasil = [];
+              idList.forEach(id => {
+                const spj = dataSpjRaw.find(s => s.id === id);
+                if (!spj || !spj._docId) return;
+                const riwayatBaru = [...(spj.riwayatRevisi || []), { tanggal: today, status: 'Siap Cair', catatan: catatanMassal }];
+                batch.update(db.collection("spj_bos_data").doc(spj._docId), { status: 'Siap Cair', catatan: '', riwayatRevisi: riwayatBaru, tanggal: today });
+                idsBerhasil.push(id);
+              });
+              await batch.commit();
+
+              setDataSpjRaw(prev => prev.map(spj => idsBerhasil.includes(spj.id) ? { ...spj, status: 'Siap Cair', catatan: '', tanggal: today } : spj));
+              alert(`${idsBerhasil.length} SPJ berhasil dipindah ke Siap Cair.`);
+              refreshHasilUpload();
+            } catch (err) {
+              console.error(err);
+              alert('Gagal melakukan verifikasi massal: ' + err.message);
+            } finally {
+              setProsesVerifikasiMassal(false);
+            }
+          };
+
           const handleUploadGuExcel = (e) => {
             const file = e.target.files && e.target.files[0];
             if (!file) return;
@@ -2148,9 +2186,9 @@
                           const grup = kelompokkanNotFound(guUploadResult.notFound);
                           const kategoriInfo = [
                             { key: 'sudahCair', label: '✅ Sudah Cair sebelumnya', color: 'text-teal-700', bg: 'bg-teal-50 border-teal-200' },
-                            { key: 'revisi', label: '🔴 Sedang Revisi', color: 'text-red-700', bg: 'bg-red-50 border-red-200' },
-                            { key: 'ditunda', label: '🟠 Ditunda', color: 'text-orange-700', bg: 'bg-orange-50 border-orange-200' },
-                            { key: 'verifikasi', label: '🟡 Menunggu Verifikasi', color: 'text-yellow-700', bg: 'bg-yellow-50 border-yellow-200' },
+                            { key: 'revisi', label: '🔴 Sedang Revisi', color: 'text-red-700', bg: 'bg-red-50 border-red-200', bisaMassal: true, statusAsli: 'Revisi' },
+                            { key: 'ditunda', label: '🟠 Ditunda', color: 'text-orange-700', bg: 'bg-orange-50 border-orange-200', bisaMassal: true, statusAsli: 'Ditunda' },
+                            { key: 'verifikasi', label: '🟡 Menunggu Verifikasi', color: 'text-yellow-700', bg: 'bg-yellow-50 border-yellow-200', bisaMassal: true, statusAsli: 'Menunggu Verifikasi' },
                             { key: 'duplikat', label: '📋 Duplikat di file Anda', color: 'text-gray-700', bg: 'bg-gray-50 border-gray-200' },
                             { key: 'tidakDitemukan', label: '❓ Tidak ditemukan di sistem', color: 'text-red-800', bg: 'bg-red-100 border-red-300' },
                           ];
@@ -2162,7 +2200,17 @@
                               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                                 {kategoriInfo.filter(k => grup[k.key].length > 0).map(k => (
                                   <div key={k.key} className={`border rounded-lg p-2 ${k.bg}`}>
-                                    <p className={`font-bold text-xs mb-1 ${k.color}`}>{k.label} ({grup[k.key].length})</p>
+                                    <div className="flex items-center justify-between gap-2 mb-1">
+                                      <p className={`font-bold text-xs ${k.color}`}>{k.label} ({grup[k.key].length})</p>
+                                      {k.bisaMassal && (
+                                        <button
+                                          disabled={prosesVerifikasiMassal}
+                                          onClick={() => verifikasiMassal(grup[k.key], k.statusAsli)}
+                                          className={`text-[11px] font-bold px-2 py-0.5 rounded border ${prosesVerifikasiMassal ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white'} ${k.color} border-current`}>
+                                          ✅ Jadikan Siap Cair semua
+                                        </button>
+                                      )}
+                                    </div>
                                     <div className="space-y-0.5">
                                       {grup[k.key].slice(0, batas).map((n, i) => (
                                         <p key={i} className={`text-xs ${n.spjIdLain ? 'cursor-pointer hover:underline' : ''} ${k.color}`}
