@@ -1138,6 +1138,7 @@
               sekolahNum: ekstrakNomorSekolah(s.sekolah),
               nominal: Number(s.nominal) || 0,
               kode4: ekstrak4DigitKode(String(s.rincian || '').split(' ')[0]),
+              rincianText: String(s.rincian || '').toLowerCase(),
             }));
 
             // Kandidat dari SEMUA status, dipakai khusus untuk cari tahu kenapa suatu baris tidak ketemu di Siap Cair
@@ -1158,6 +1159,12 @@
               );
               if (opsi.length > 1 && b.kode4) {
                 const opsiSempit = opsi.filter(k => k.kode4 === b.kode4);
+                if (opsiSempit.length >= 1) opsi = opsiSempit;
+              }
+              // Disambiguasi tambahan pakai teks belanja (untuk format PDF tanpa kode belanja)
+              if (opsi.length > 1 && b.belanja) {
+                const belanjaNorm = b.belanja.toLowerCase();
+                const opsiSempit = opsi.filter(k => k.rincianText && (belanjaNorm.includes(k.rincianText) || k.rincianText.includes(belanjaNorm)));
                 if (opsiSempit.length >= 1) opsi = opsiSempit;
               }
               if (opsi.length === 1) {
@@ -1252,10 +1259,10 @@
                     const content = await page.getTextContent();
                     fullText += content.items.map(it => it.str).join(' ') + ' ';
                   }
-                  // Regex 1 baris tabel: No No2 KodeUnit "UPT ... <angka> GRESIK" Kecamatan Rp<nominal> <kode.belanja> <keterangan> <BULAN>
-                  const BULAN = 'JANUARI|FEBRUARI|MARET|APRIL|MEI|JUNI|JULI|AGUSTUS|SEPTEMBER|OKTOBER|NOVEMBER|DESEMBER';
+                  // Regex disederhanakan: cari "Nama Sekolah ... Rp<nominal> <belanja>" per baris.
+                  // Kolom lain (REG, kecamatan, kode belanja, bulan) dianggap pelengkap dan tidak disyaratkan ada.
                   const rowRegex = new RegExp(
-                    '\\d+\\s+\\d+\\s+\\d{3,4}\\s+((?:UPT|SMP|SMA|SMK|TK|PAUD|SLB)[A-Za-z.\\s]*?\\d+\\s+GRESIK)\\s+(.*?)\\s*Rp\\s?([\\d.,]+)\\s+(\\d{2}\\.\\d{3}\\.\\d{5})\\s+(.*?)\\s+(?:' + BULAN + ')\\b',
+                    '((?:UPT\\s+)?(?:SD|SMP|SMA|SMK|TK|PAUD|SLB)[A-Za-z.\\s]*?\\d+\\s+GRESIK)[\\s\\S]*?Rp\\s?([\\d.,]+)\\s+(.*?)(?=\\d+\\s+(?:UPT\\s+)?(?:SD|SMP|SMA|SMK|TK|PAUD|SLB)[A-Za-z.\\s]*?\\d+\\s+GRESIK|$)',
                     'gi'
                   );
                   const baris = [];
@@ -1265,8 +1272,9 @@
                     baris.push({
                       sekolahNum: ekstrakNomorSekolah(sekolahRaw),
                       sekolahRaw,
-                      nominal: parseNominalFleksibel(m[3]),
-                      kode4: ekstrak4DigitKode(m[4]),
+                      nominal: parseNominalFleksibel(m[2]),
+                      belanja: m[3].trim(),
+                      kode4: '',
                     });
                   }
                   cocokkanDanCeklis(baris.filter(b => b.sekolahNum && b.nominal > 0));
