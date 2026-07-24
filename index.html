@@ -562,6 +562,8 @@
           const [localRiwayat, setLocalRiwayat] = useState([]);
           const [isEditModalOpen, setIsEditModalOpen] = useState(false);
           const [editingSpj, setEditingSpj] = useState(null);
+          const [quickStatusSpj, setQuickStatusSpj] = useState(null);
+          const [quickStatusValue, setQuickStatusValue] = useState('');
           const [aksesPic, setAksesPic] = useState('Semua');
           
           // ============================================================
@@ -1051,10 +1053,13 @@
               const riwayatBaru = [...(editingSpj.riwayatRevisi || []), { tanggal: today, status: editedStatus, catatan: `Status diubah manual dari ${editingSpj.status} menjadi ${editedStatus} lewat Edit` }];
               updatedDataPayload.riwayatRevisi = riwayatBaru;
             }
+            if (!editingSpj._docId) {
+              alert('Gagal menyimpan: data ini tidak memiliki _docId (ID dokumen Firestore), sehingga perubahan tidak bisa disimpan ke database. Coba muat ulang halaman lalu edit lagi.');
+              setIsLoading(false);
+              return;
+            }
             try {
-              if (editingSpj._docId) {
-                await db.collection("spj_bos_data").doc(editingSpj._docId).update(updatedDataPayload);
-              }
+              await db.collection("spj_bos_data").doc(editingSpj._docId).update(updatedDataPayload);
               alert('Berhasil diperbarui!');
               setDataSpjRaw(prev => prev.map(spj => {
                 if (spj.id !== editingSpj.id) return spj;
@@ -1081,6 +1086,57 @@
             finally { setIsLoading(false); }
           };
 
+          // BARU: Ubah Status cepat — HANYA mengubah field status (tanpa perlu isi ulang
+          // kecamatan/sekolah/nominal/rincian seperti di form Edit lengkap). Dipakai kalau
+          // cuma mau memindahkan SPJ ke status lain tanpa risiko gagal submit gara-gara
+          // validasi field lain di form Edit.
+          const openQuickStatus = (spj) => { setQuickStatusSpj(spj); setQuickStatusValue(spj.status); };
+
+          const handleQuickStatusSave = async () => {
+            if (!quickStatusSpj) return;
+            if (!quickStatusSpj._docId) {
+              alert('Gagal menyimpan: data ini tidak memiliki _docId (ID dokumen Firestore), sehingga status tidak bisa diubah. Coba muat ulang halaman lalu coba lagi.');
+              return;
+            }
+            if (quickStatusValue === quickStatusSpj.status) { setQuickStatusSpj(null); return; }
+            setIsLoading(true);
+            const today = new Date().toISOString().split('T')[0];
+            const payload = {
+              status: quickStatusValue,
+              riwayatRevisi: [...(quickStatusSpj.riwayatRevisi || []), { tanggal: today, status: quickStatusValue, catatan: `Status dipindah manual dari ${quickStatusSpj.status} menjadi ${quickStatusValue} lewat Ubah Status` }],
+              tanggal: today,
+            };
+            if (quickStatusSpj.status === 'Sudah Cair' && quickStatusValue !== 'Sudah Cair') {
+              payload.gu = firebase.firestore.FieldValue.delete();
+              payload.tanggalCair = firebase.firestore.FieldValue.delete();
+            }
+            try {
+              await db.collection("spj_bos_data").doc(quickStatusSpj._docId).update(payload);
+              setDataSpjRaw(prev => prev.map(spj => {
+                if (spj._docId !== quickStatusSpj._docId) return spj;
+                const merged = { ...spj, ...payload };
+                if (quickStatusSpj.status === 'Sudah Cair' && quickStatusValue !== 'Sudah Cair') {
+                  delete merged.gu; delete merged.tanggalCair;
+                }
+                return merged;
+              }));
+              try {
+                await fetch(`https://script.google.com/macros/s/AKfycbw7Bg-nPUQxOtyWJgUQKp0VaSE4SadAXr-iqkJLjSjiuR_jAtZsEHrxAk7SXnf42Hleqw/exec?id=${quickStatusSpj.id}`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ status: quickStatusValue, gu: '', tanggalCair: '', _method: 'PATCH', _id: quickStatusSpj.id }),
+                });
+              } catch (sheetErr) {
+                console.warn('SheetBest sync gagal (data sudah diupdate di Firestore):', sheetErr.message);
+              }
+              setQuickStatusSpj(null);
+            } catch (err) {
+              console.error(err);
+              alert('Gagal mengubah status: ' + err.message);
+            } finally {
+              setIsLoading(false);
+            }
+          };
+
           // ============================================================
           // BARU: Fungsi-fungsi untuk fitur Pencairan per GU
           // ============================================================
@@ -1102,14 +1158,14 @@
           const [lastUploadBaris, setLastUploadBaris] = useState(null); // simpan hasil parsing terakhir untuk fitur refresh
           const [showAllNotFound, setShowAllNotFound] = useState(false);
           const [showAllAmbiguous, setShowAllAmbiguous] = useState(false);
-          const [guPanelCollapsed, setGuPanelCollapsed] = useState(false); // true = diringkas (tutup), data tetap ada
+          const [guPanelCollapsed, setGuPanelCollapsed] = useState(true); // true = diringkas (tutup), data tetap ada
 
           const hapusPilihanUpload = () => {
             if (!window.confirm('Batalkan semua centang hasil upload file ini? Ceklisan akan dikosongkan.')) return;
             setSelectedForCair({});
             setGuUploadResult(null);
             setLastUploadBaris(null);
-            setGuPanelCollapsed(false);
+            setGuPanelCollapsed(true);
           };
 
           const parseNominalFleksibel = (v) => {
@@ -1152,16 +1208,26 @@
             const matched = [];
             const notFound = [];
             const ambiguous = [];
+            const belanjaBeda = [];
 
             baris.forEach(b => {
               let opsi = kandidat.filter(k =>
                 k.sekolahNum === b.sekolahNum && k.nominal === b.nominal && !sudahDipakai.has(k.spj.id)
               );
-              if (opsi.length > 1 && b.kode4) {
-                const opsiSempit = opsi.filter(k => k.kode4 === b.kode4);
-                if (opsiSempit.length >= 1) opsi = opsiSempit;
+              // PENTING: kalau baris file punya kode belanja, WAJIB dicocokkan — bukan cuma
+              // dipakai untuk memilah kalau kebetulan ada >1 opsi. Sekolah yang sama bisa
+              // punya beberapa SPJ dengan nominal yang kebetulan sama tapi jenis belanja
+              // berbeda (mis. ATK vs Perlengkapan Olahraga); tanpa pengecekan ini, sistem
+              // bisa salah pasang ke SPJ yang jenis belanjanya tidak sesuai isi file.
+              if (b.kode4) {
+                opsi = opsi.filter(k => k.kode4 === b.kode4);
               }
-              // Disambiguasi tambahan pakai teks belanja (untuk format PDF tanpa kode belanja)
+              // Sama untuk teks nama belanja hasil baca PDF (dipakai saat file tidak
+              // punya kolom kode belanja eksplisit). Teks hasil baca PDF gampang meleset
+              // formatnya (potongan kalimat, tanda baca beda, dll), jadi ini HANYA dipakai
+              // untuk memilah kalau ada >1 kandidat — bukan untuk menolak satu-satunya
+              // kandidat yang valid, supaya SPJ yang sebenarnya sudah benar tidak malah
+              // dianggap "tidak ditemukan di sistem".
               if (opsi.length > 1 && b.belanja) {
                 const belanjaNorm = b.belanja.toLowerCase();
                 const opsiSempit = opsi.filter(k => k.rincianText && (belanjaNorm.includes(k.rincianText) || k.rincianText.includes(belanjaNorm)));
@@ -1170,6 +1236,18 @@
               if (opsi.length === 1) {
                 sudahDipakai.add(opsi[0].spj.id);
                 matched.push(opsi[0].spj.id);
+                // Sekolah+nominal sudah cocok persis (sinyal kuat), tapi kalau teks belanja
+                // dari file ternyata beda jauh dari rincian SPJ di sistem, tetap tercentang
+                // (jangan sampai malah tidak kecentang / dianggap "tidak ditemukan") — tapi
+                // dicatat supaya user bisa cek manual sebelum klik "Cairkan ke GU".
+                if (b.belanja) {
+                  const belanjaNorm = b.belanja.toLowerCase();
+                  const rt = opsi[0].rincianText;
+                  const cocokTeks = rt && (belanjaNorm.includes(rt) || rt.includes(belanjaNorm));
+                  if (!cocokTeks) {
+                    belanjaBeda.push({ spjId: opsi[0].spj.id, sekolahRaw: b.sekolahRaw, nominal: b.nominal, belanjaFile: b.belanja, rincianSistem: opsi[0].spj.rincian });
+                  }
+                }
               } else if (opsi.length === 0) {
                 // Cari tahu SPJ ini sekarang statusnya apa (kalau ada di sistem tapi bukan Siap Cair)
                 const lain = kandidatSemua.find(k => k.sekolahNum === b.sekolahNum && k.nominal === b.nominal);
@@ -1195,7 +1273,7 @@
             const updated = {};
             matched.forEach(id => { updated[id] = true; });
             setSelectedForCair(updated);
-            setGuUploadResult({ matched: matched.length, notFound, ambiguous, totalRow: baris.length });
+            setGuUploadResult({ matched: matched.length, notFound, ambiguous, belanjaBeda, totalRow: baris.length });
           };
 
           const refreshHasilUpload = () => {
@@ -1687,6 +1765,7 @@
                         ) : (
                           <div className="flex justify-end space-x-1.5 flex-wrap gap-y-1">
                             {showVerifyAction && <button onClick={() => openVerifyModal(spj)} className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconClipboardCheck size={14} className="mr-1 hidden sm:block"/> Koreksi</button>}
+                            <button onClick={() => openQuickStatus(spj)} className="bg-purple-50 text-purple-600 hover:bg-purple-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconRotateCcw size={14} className="mr-1 hidden sm:block"/> Ubah Status</button>
                             <button onClick={() => handleOpenEdit(spj)} className="bg-amber-50 text-amber-600 hover:bg-amber-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconEdit size={14} className="mr-1 hidden sm:block"/> Edit</button>
                             <button onClick={() => handleDeleteSpj(spj.id)} className="bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconTrash size={14} className="mr-1 hidden sm:block"/> Hapus</button>
                           </div>
@@ -2213,23 +2292,42 @@
                     </div>
                     {guUploadResult && (
                       <div className="mt-3 pt-3 border-t border-teal-200 text-xs">
-                        <p className="text-teal-800">
-                          📄 Dari <span className="font-bold">{guUploadResult.totalRow}</span> baris di file:{' '}
-                          <span className="font-bold text-teal-700">{guUploadResult.matched} SPJ berhasil dicentang otomatis</span>
-                          {guUploadResult.notFound.length > 0 && (
-                            <span className="text-red-600"> • {guUploadResult.notFound.length} baris tidak ketemu di daftar Siap Cair</span>
-                          )}
-                          {guUploadResult.ambiguous.length > 0 && (
-                            <span className="text-orange-600"> • {guUploadResult.ambiguous.length} baris cocok ganda (perlu dicentang manual)</span>
-                          )}
-                          {' '}
-                          <button onClick={refreshHasilUpload} className="text-teal-600 hover:text-teal-800 font-semibold underline ml-2">🔄 refresh</button>
-                          <button onClick={() => setGuPanelCollapsed(v => !v)} className="text-gray-400 hover:text-gray-600 underline ml-2">
-                            {guPanelCollapsed ? 'buka detail' : 'tutup'}
-                          </button>
-                          <button onClick={hapusPilihanUpload} className="text-red-500 hover:text-red-700 underline ml-2">🗑️ hapus pilihan upload</button>
-                        </p>
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <p className="text-teal-800">
+                            📄 Dari <span className="font-bold">{guUploadResult.totalRow}</span> baris di file:{' '}
+                            <span className="font-bold text-teal-700">{guUploadResult.matched} SPJ berhasil dicentang otomatis</span>
+                            {guUploadResult.notFound.length > 0 && (
+                              <span className="text-red-600"> • {guUploadResult.notFound.length} baris tidak ketemu di daftar Siap Cair</span>
+                            )}
+                            {guUploadResult.ambiguous.length > 0 && (
+                              <span className="text-orange-600"> • {guUploadResult.ambiguous.length} baris cocok ganda (perlu dicentang manual)</span>
+                            )}
+                            {guUploadResult.belanjaBeda && guUploadResult.belanjaBeda.length > 0 && (
+                              <span className="text-amber-600"> • {guUploadResult.belanjaBeda.length} baris perlu dicek (jenis belanja beda)</span>
+                            )}
+                          </p>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <button onClick={refreshHasilUpload} className="text-teal-600 hover:text-teal-800 font-semibold underline px-1">🔄 refresh</button>
+                            <button onClick={() => setGuPanelCollapsed(v => !v)}
+                              className={`px-3 py-1.5 rounded-lg font-bold border transition ${guPanelCollapsed ? 'bg-teal-600 text-white border-teal-600 hover:bg-teal-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>
+                              {guPanelCollapsed ? '▼ Lihat detail' : '▲ Sembunyikan detail'}
+                            </button>
+                            <button onClick={hapusPilihanUpload} className="text-red-500 hover:text-red-700 underline px-1">🗑️ hapus pilihan upload</button>
+                          </div>
+                        </div>
                         {!guPanelCollapsed && <>
+                        {guUploadResult.belanjaBeda && guUploadResult.belanjaBeda.length > 0 && (
+                          <div className="mt-2 border rounded-lg p-2 bg-amber-50 border-amber-300">
+                            <p className="font-bold text-amber-800 mb-1">⚠️ Sudah tercentang otomatis, tapi mohon dicek manual — sekolah & nominal cocok, tapi jenis belanja di file beda dengan sistem ({guUploadResult.belanjaBeda.length}):</p>
+                            <div className="space-y-1">
+                              {guUploadResult.belanjaBeda.map((n, i) => (
+                                <p key={i} className="text-xs text-amber-800">
+                                  • {n.sekolahRaw} ({formatRupiah(n.nominal)}) ({n.spjId}) — di sistem: <span className="italic">"{n.rincianSistem}"</span>, di file: <span className="italic">"{n.belanjaFile}"</span>
+                                </p>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         {guUploadResult.notFound.length > 0 && (() => {
                           const grup = kelompokkanNotFound(guUploadResult.notFound);
                           const kategoriInfo = [
@@ -2294,6 +2392,9 @@
                             )}
                           </div>
                         )}
+                        <button onClick={() => setGuPanelCollapsed(true)} className="mt-3 px-3 py-1.5 rounded-lg font-bold border bg-white text-gray-600 border-gray-300 hover:bg-gray-50">
+                          ▲ Sembunyikan detail
+                        </button>
                         </>}
                       </div>
                     )}
@@ -2492,6 +2593,9 @@
                                       <td className="p-3 text-right font-bold text-teal-700">{formatRupiah(spj.nominal)}</td>
                                       {!isViewOnly && (
                                         <td className="p-3 text-right whitespace-nowrap">
+                                          <button onClick={() => openQuickStatus(spj)} className="bg-purple-50 text-purple-600 hover:bg-purple-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition mr-1">
+                                            <IconRotateCcw size={13} className="mr-1"/> Ubah Status
+                                          </button>
                                           <button onClick={() => handleOpenEdit(spj)} className="bg-orange-50 text-orange-600 hover:bg-orange-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition mr-1">
                                             <IconEdit size={13} className="mr-1"/> Edit
                                           </button>
@@ -2823,6 +2927,39 @@
                         </button>
                       </div>
                     </form>
+                  </div>
+                </div>
+              )}
+
+              {/* BARU: MODAL UBAH STATUS CEPAT — hanya ganti status, tidak menyentuh field lain */}
+              {quickStatusSpj && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                  <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-xl font-bold flex items-center text-gray-800"><IconRotateCcw className="mr-2 text-purple-600" size={22}/> Ubah Status</h3>
+                      <button onClick={() => setQuickStatusSpj(null)}><IconXCircle/></button>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-1"><span className="font-bold">{quickStatusSpj.id}</span> — {quickStatusSpj.sekolah}</p>
+                    <p className="text-xs text-gray-400 mb-4">{quickStatusSpj.rincian} • {formatRupiah(quickStatusSpj.nominal)}</p>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Status saat ini: <span className="font-bold">{quickStatusSpj.status}</span></label>
+                    <select value={quickStatusValue} onChange={(e) => setQuickStatusValue(e.target.value)}
+                      className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm mb-2">
+                      <option value="Menunggu Verifikasi">Menunggu Verifikasi (Antrian Verifikasi)</option>
+                      <option value="Siap Cair">Siap Cair (Antrian Siap Cair)</option>
+                      <option value="Revisi">Revisi (Perlu Revisi)</option>
+                      <option value="Ditunda">Ditunda (SPJ Ditunda)</option>
+                      <option value="Sudah Cair">Sudah Cair</option>
+                    </select>
+                    {quickStatusSpj.status === 'Sudah Cair' && quickStatusValue !== 'Sudah Cair' && (
+                      <p className="text-xs text-orange-600 mb-2">⚠️ Kalau dipindah keluar dari "Sudah Cair", data GU dan tanggal cair SPJ ini akan dihapus dan keluar dari grup GU-nya.</p>
+                    )}
+                    <div className="flex justify-end space-x-2 pt-4 mt-2 border-t">
+                      <button onClick={() => setQuickStatusSpj(null)} disabled={isLoading} className="px-4 py-2 border rounded text-gray-600 font-medium disabled:opacity-50">Batal</button>
+                      <button onClick={handleQuickStatusSave} disabled={isLoading}
+                        className={`px-6 py-2 text-white rounded font-bold shadow-md transition ${isLoading ? 'bg-purple-300 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}>
+                        {isLoading ? 'Menyimpan...' : 'Simpan Status'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
