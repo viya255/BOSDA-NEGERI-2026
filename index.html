@@ -599,6 +599,11 @@
           const [editingTglCairValue, setEditingTglCairValue] = useState('');
           const [expandedGu, setExpandedGu] = useState({});
           const [sudahCairSearch, setSudahCairSearch] = useState('');
+          // BARU: rename nama GU (mempengaruhi label grup & nama file Excel saat diunduh)
+          const [editingGuNama, setEditingGuNama] = useState(null);
+          const [editingGuNamaValue, setEditingGuNamaValue] = useState('');
+          // BARU: pindahkan SPJ yang sudah tercentang ke atas tabel Siap Cair, sementara, biar gampang dicek
+          const [tercentangDiAtas, setTercentangDiAtas] = useState(true);
 
           useEffect(() => {
             const unsubscribe = db.collection("spj_bos_data")
@@ -1331,21 +1336,49 @@
               reader.onload = async (evt) => {
                 try {
                   const pdf = await pdfjsLib.getDocument({ data: evt.target.result }).promise;
-                  let fullText = '';
+
+                  // PENTING: pdf.js mengembalikan potongan teks (items) sesuai urutan "digambar" di
+                  // dalam file PDF — untuk PDF hasil export Google Sheets ini urutannya PER KOLOM
+                  // (semua isi kolom REG dulu, baru kolom SEKOLAH, dst), BUKAN per baris tabel.
+                  // Kalau digabung pakai .join(' ') begitu saja, hasilnya jadi kacau (nilai nominal
+                  // banyak sekolah lain ikut nyangkut jadi satu kalimat panjang).
+                  // Solusinya: setiap potongan teks di PDF punya koordinat X/Y persis di halaman.
+                  // Potongan yang satu BARIS TABEL yang sama nilai Y-nya selalu berdekatan (beda tipis
+                  // karena font angka & teks kadang beda baseline sedikit). Jadi kita kelompokkan
+                  // ulang semua potongan teks per baris berdasarkan posisi Y (dengan toleransi kecil),
+                  // lalu urutkan isi tiap baris dari kiri ke kanan (X). Hasilnya: satu baris tabel PDF
+                  // jadi satu baris teks yang rapi & berurutan, persis seperti tabel aslinya.
+                  const semuaBaris = [];
                   for (let i = 1; i <= pdf.numPages; i++) {
                     const page = await pdf.getPage(i);
                     const content = await page.getTextContent();
-                    fullText += content.items.map(it => it.str).join(' ') + ' ';
+                    const potongan = content.items
+                      .filter(it => it.str && it.str.trim())
+                      .map(it => ({ str: it.str.trim(), x: it.transform[4], y: it.transform[5] }));
+                    potongan.sort((a, b) => b.y - a.y || a.x - b.x);
+                    const TOLERANSI_Y = 2.5; // px — cukup untuk menyatukan 1 baris tabel, tidak akan menyatukan 2 baris berbeda (jarak antar baris biasanya ~15-20px)
+                    let barisSaatIni = null;
+                    potongan.forEach(p => {
+                      if (barisSaatIni && Math.abs(barisSaatIni.y - p.y) <= TOLERANSI_Y) {
+                        barisSaatIni.items.push(p);
+                      } else {
+                        barisSaatIni = { y: p.y, items: [p] };
+                        semuaBaris.push(barisSaatIni);
+                      }
+                    });
                   }
-                  // Regex disederhanakan: cari "Nama Sekolah ... Rp<nominal> <belanja>" per baris.
-                  // Kolom lain (REG, kecamatan, kode belanja, bulan) dianggap pelengkap dan tidak disyaratkan ada.
+                  const teksBaris = semuaBaris.map(b => b.items.sort((a, c) => a.x - c.x).map(p => p.str).join(' '));
+
+                  // Sekarang tiap elemen teksBaris idealnya = "REG NAMA_SEKOLAH KECAMATAN Rp<nominal> BELANJA"
+                  // dalam satu baris yang sudah rapi. Cari baris yang cocok pola SPJ.
                   const rowRegex = new RegExp(
-                    '((?:UPT\\s+)?(?:SD|SMP|SMA|SMK|TK|PAUD|SLB)[A-Za-z.\\s]*?\\d+\\s+GRESIK)[\\s\\S]*?Rp\\s?([\\d.,]+)\\s+(.*?)(?=\\d+\\s+(?:UPT\\s+)?(?:SD|SMP|SMA|SMK|TK|PAUD|SLB)[A-Za-z.\\s]*?\\d+\\s+GRESIK|$)',
-                    'gi'
+                    '^\\\\d+\\\\s+((?:UPT\\\\s+)?(?:SD|SMP|SMA|SMK|TK|PAUD|SLB)[A-Za-z.]*\\\\s*(?:NEGERI\\\\s*)?\\\\d+)\\\\s+GRESIK\\\\s+.*?Rp\\\\s?([\\\\d.,]+)\\\\s*(.*)$',
+                    'i'
                   );
                   const baris = [];
-                  let m;
-                  while ((m = rowRegex.exec(fullText)) !== null) {
+                  teksBaris.forEach(line => {
+                    const m = line.match(rowRegex);
+                    if (!m) return;
                     const sekolahRaw = m[1].trim();
                     baris.push({
                       sekolahNum: ekstrakNomorSekolah(sekolahRaw),
@@ -1354,7 +1387,7 @@
                       belanja: m[3].trim(),
                       kode4: '',
                     });
-                  }
+                  });
                   cocokkanDanCeklis(baris.filter(b => b.sekolahNum && b.nominal > 0));
                 } catch (err) {
                   console.error(err);
@@ -1526,6 +1559,7 @@
             const totalCair = dataSpj.filter(d => d.status === 'Sudah Cair').reduce((a, d) => a + (Number(d.nominal) || 0), 0);
             const persenSerapan = totalPagu > 0 ? Math.min(100, (totalCair / totalPagu) * 100) : 0;
             const persenDiajukan = totalPagu > 0 ? Math.min(100, (totalDiajukan / totalPagu) * 100) : 0;
+            const totalSisaPagu = totalPagu - totalDiajukan;
             const stages = [
               { label: 'SPJ Masuk', value: stats.total, color: 'bg-blue-500', icon: <IconFileText size={16}/> },
               { label: 'Menunggu Verifikasi', value: stats.menunggu, color: 'bg-yellow-500', icon: <IconClock size={16}/> },
@@ -1535,6 +1569,30 @@
             return (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-gray-800">Ringkasan Alur SPJ {selectedYear}</h2>
+
+              {/* BARU: kartu ringkasan progres — buat jawab cepat kalau ditanya atasan "progresnya berapa persen" */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm">
+                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Total Pagu Ditampilkan</p>
+                  <p className="text-2xl font-bold text-gray-800 mt-1">{formatRupiah(totalPagu)}</p>
+                  <p className="text-xs text-gray-400 mt-1">{rakData.length} sekolah</p>
+                </div>
+                <div className="bg-orange-50 border border-orange-100 rounded-xl p-5 shadow-sm">
+                  <p className="text-xs text-orange-600 font-medium uppercase tracking-wide">Sudah Diajukan (SPJ)</p>
+                  <p className="text-2xl font-bold text-orange-600 mt-1">{formatRupiah(totalDiajukan)}</p>
+                  <p className="text-xs text-orange-400 mt-1">{totalPagu > 0 ? ((totalDiajukan/totalPagu)*100).toFixed(1) : 0}% dari total pagu</p>
+                </div>
+                <div className="bg-teal-50 border border-teal-100 rounded-xl p-5 shadow-sm">
+                  <p className="text-xs text-teal-600 font-medium uppercase tracking-wide">Sudah Cair</p>
+                  <p className="text-2xl font-bold text-teal-700 mt-1">{formatRupiah(totalCair)}</p>
+                  <p className="text-xs text-teal-500 mt-1">{totalPagu > 0 ? persenSerapan.toFixed(1) : 0}% dari total pagu</p>
+                </div>
+                <div className="bg-green-50 border border-green-100 rounded-xl p-5 shadow-sm">
+                  <p className="text-xs text-green-600 font-medium uppercase tracking-wide">Sisa Pagu</p>
+                  <p className="text-2xl font-bold text-green-700 mt-1">{formatRupiah(totalSisaPagu)}</p>
+                  <p className="text-xs text-green-500 mt-1">{totalPagu > 0 ? ((totalSisaPagu/totalPagu)*100).toFixed(1) : 100}% tersisa</p>
+                </div>
+              </div>
 
               {/* BARU: Progress SPJ — serapan anggaran & tahapan proses */}
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-6">
@@ -1765,7 +1823,6 @@
                         ) : (
                           <div className="flex justify-end space-x-1.5 flex-wrap gap-y-1">
                             {showVerifyAction && <button onClick={() => openVerifyModal(spj)} className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconClipboardCheck size={14} className="mr-1 hidden sm:block"/> Koreksi</button>}
-                            <button onClick={() => openQuickStatus(spj)} className="bg-purple-50 text-purple-600 hover:bg-purple-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconRotateCcw size={14} className="mr-1 hidden sm:block"/> Ubah Status</button>
                             <button onClick={() => handleOpenEdit(spj)} className="bg-amber-50 text-amber-600 hover:bg-amber-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconEdit size={14} className="mr-1 hidden sm:block"/> Edit</button>
                             <button onClick={() => handleDeleteSpj(spj.id)} className="bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconTrash size={14} className="mr-1 hidden sm:block"/> Hapus</button>
                           </div>
@@ -2159,6 +2216,16 @@
               return sortOrder === 'asc' ? numA - numB : numB - numA;
             });
 
+            // BARU: di tab Siap Cair, opsional pindahkan yang sudah tercentang ke atas sendiri
+            // (sementara, sekadar memudahkan pengecekan hasil upload/ceklis manual — urutan asli tetap dipakai untuk yang belum tercentang)
+            if (statusFilter === 'siapCair' && tercentangDiAtas) {
+              dataSpjFiltered = [...dataSpjFiltered].sort((a, b) => {
+                const aCek = selectedForCair[a.id] ? 1 : 0;
+                const bCek = selectedForCair[b.id] ? 1 : 0;
+                return bCek - aCek;
+              });
+            }
+
             // Search
             if (searchQuery.trim() !== '') {
               const q = searchQuery.toLowerCase();
@@ -2244,6 +2311,13 @@
                     className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white shadow-sm hover:bg-gray-50 font-medium whitespace-nowrap">
                     {sortOrder === 'asc' ? '⬆ Terlama' : '⬇ Terbaru'}
                   </button>
+                  {isSiapCairTab && (
+                    <button onClick={() => setTercentangDiAtas(v => !v)}
+                      title="Pindahkan SPJ yang sudah tercentang ke bagian paling atas tabel, sementara, biar gampang dicek"
+                      className={`px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap border shadow-sm transition flex items-center gap-1.5 ${tercentangDiAtas ? 'bg-teal-600 text-white border-teal-600 hover:bg-teal-700' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+                      <IconCheckCircle2 size={14}/> Tercentang di atas
+                    </button>
+                  )}
                   {(filterKecamatan !== 'Semua' || filterPic !== 'Semua' || filterTriwulan !== 'Semua' || searchQuery) && (
                     <button onClick={() => { setFilterKecamatan('Semua'); setFilterPic('Semua'); setFilterTriwulan('Semua'); setSearchQuery(''); }}
                       className="px-3 py-2 bg-red-50 text-red-500 hover:bg-red-100 border border-red-200 rounded-lg text-xs font-bold transition whitespace-nowrap">
@@ -2459,6 +2533,54 @@
             }
           };
 
+          // BARU: rename nama GU (grup "Ganti Uang") — ikut mengubah nama file Excel saat diunduh
+          const startEditGuNama = (gu) => {
+            setEditingGuNama(gu);
+            setEditingGuNamaValue(gu);
+          };
+
+          const cancelEditGuNama = () => {
+            setEditingGuNama(null);
+            setEditingGuNamaValue('');
+          };
+
+          const saveEditGuNama = async (guLama, listSpj) => {
+            const guBaru = editingGuNamaValue.trim();
+            if (!guBaru) { alert('Nama GU tidak boleh kosong!'); return; }
+            if (guBaru === guLama) { cancelEditGuNama(); return; }
+            setIsLoading(true);
+            try {
+              const batch = db.batch();
+              listSpj.forEach(spj => {
+                if (!spj._docId) return;
+                batch.update(db.collection("spj_bos_data").doc(spj._docId), { gu: guBaru });
+              });
+              await batch.commit();
+
+              setDataSpjRaw(prev => prev.map(spj => listSpj.some(s => s.id === spj.id) ? { ...spj, gu: guBaru } : spj));
+
+              // Sinkron ke SheetBest (opsional, per item, tidak blok kalau gagal)
+              listSpj.forEach(async (spj) => {
+                try {
+                  await fetch(`https://script.google.com/macros/s/AKfycbw7Bg-nPUQxOtyWJgUQKp0VaSE4SadAXr-iqkJLjSjiuR_jAtZsEHrxAk7SXnf42Hleqw/exec?id=${spj.id}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ gu: guBaru, _method: 'PATCH', _id: spj.id }),
+                  });
+                } catch (sheetErr) {
+                  console.warn('SheetBest sync gagal untuk', spj.id, sheetErr.message);
+                }
+              });
+
+              setEditingGuNama(null);
+              setEditingGuNamaValue('');
+            } catch (error) {
+              console.error('Error:', error);
+              alert('Gagal mengubah nama GU: ' + error.message);
+            } finally {
+              setIsLoading(false);
+            }
+          };
+
           const renderSudahCair = () => {
             let dataCair = dataSpj.filter(spj => spj.status === 'Sudah Cair');
 
@@ -2531,7 +2653,26 @@
                               <div className="p-2 bg-teal-600 text-white rounded-lg"><IconLayers size={18}/></div>
                               <div>
                                 <p className="font-bold text-teal-800 flex items-center gap-2 flex-wrap">
-                                  {gu}
+                                  {isViewOnly ? gu : editingGuNama === gu ? (
+                                    <span className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                      <input type="text" value={editingGuNamaValue} onChange={(e) => setEditingGuNamaValue(e.target.value)}
+                                        autoFocus className="text-sm font-bold px-2 py-0.5 rounded-lg border border-teal-300 focus:ring-2 focus:ring-teal-400 focus:outline-none w-48"/>
+                                      <button onClick={() => saveEditGuNama(gu, listSpj)} disabled={isLoading}
+                                        className="bg-teal-600 hover:bg-teal-700 text-white p-1 rounded-full transition disabled:opacity-50" title="Simpan">
+                                        <IconCheckCircle2 size={14}/>
+                                      </button>
+                                      <button onClick={cancelEditGuNama} disabled={isLoading}
+                                        className="bg-gray-200 hover:bg-gray-300 text-gray-600 p-1 rounded-full transition disabled:opacity-50" title="Batal">
+                                        <IconXCircle size={14}/>
+                                      </button>
+                                    </span>
+                                  ) : (
+                                    <span onClick={(e) => { e.stopPropagation(); startEditGuNama(gu); }}
+                                      className="cursor-pointer hover:underline flex items-center gap-1" title="Klik untuk ubah nama GU (juga mengubah nama file Excel)">
+                                      {gu}
+                                      <IconEdit size={11} className="opacity-60"/>
+                                    </span>
+                                  )}
                                   <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-white text-teal-700 border border-teal-200">{listSpj.length} SPJ</span>
                                   {isViewOnly ? (
                                     <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-teal-600 text-white flex items-center gap-1">
