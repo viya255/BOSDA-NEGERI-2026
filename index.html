@@ -598,6 +598,7 @@
           const [editingTglCairGu, setEditingTglCairGu] = useState(null);
           const [editingTglCairValue, setEditingTglCairValue] = useState('');
           const [expandedGu, setExpandedGu] = useState({});
+          const [expandedRiwayatCair, setExpandedRiwayatCair] = useState({});
           const [sudahCairSearch, setSudahCairSearch] = useState('');
           // BARU: rename nama GU (mempengaruhi label grup & nama file Excel saat diunduh)
           const [editingGuNama, setEditingGuNama] = useState(null);
@@ -2723,9 +2724,22 @@
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {listSpj.map(spj => (
-                                    <tr key={spj.id} className="border-b border-gray-100 hover:bg-gray-50">
-                                      <td className="p-3 font-medium text-gray-700">{spj.id}</td>
+                                  {listSpj.map(spj => {
+                                    const adaRiwayat = spj.riwayatRevisi && spj.riwayatRevisi.length > 0;
+                                    const riwayatTerbuka = expandedRiwayatCair[spj.id] === true; // default tersembunyi
+                                    return (
+                                    <React.Fragment key={spj.id}>
+                                    <tr className="border-b border-gray-100 hover:bg-gray-50">
+                                      <td className="p-3 font-medium text-gray-700">
+                                        {spj.id}
+                                        {adaRiwayat && (
+                                          <button onClick={() => setExpandedRiwayatCair(prev => ({ ...prev, [spj.id]: !prev[spj.id] }))}
+                                            className="mt-1 flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-teal-600 transition">
+                                            <IconClock size={11}/> Riwayat
+                                            <IconChevronDown size={11} className={`transition-transform ${riwayatTerbuka ? 'rotate-180' : ''}`}/>
+                                          </button>
+                                        )}
+                                      </td>
                                       <td className="p-3">
                                         <div className="font-medium text-gray-800">{spj.sekolah}</div>
                                         <div className="text-xs text-gray-500 flex items-center mt-0.5"><IconMapPin size={11} className="mr-1"/>Kec. {spj.kecamatan} • {spj.triwulan}</div>
@@ -2746,7 +2760,27 @@
                                         </td>
                                       )}
                                     </tr>
-                                  ))}
+                                    {adaRiwayat && riwayatTerbuka && (
+                                      <tr className="border-b border-gray-100 bg-gray-50/60">
+                                        <td colSpan={isViewOnly ? 4 : 5} className="p-3 pt-1">
+                                          <div className="space-y-1 max-w-xl">
+                                            {spj.riwayatRevisi.map((r, i) => (
+                                              <div key={i} className={`text-xs rounded px-2 py-1 border flex items-start gap-1 ${r.selesai ? 'bg-green-50 border-green-200 opacity-70' : 'bg-white border-gray-200'}`}>
+                                                <span className="flex-shrink-0 mt-0.5">{r.selesai ? '✅' : r.status === 'Revisi' ? '🔴' : r.status === 'Ditunda' ? '🟠' : r.status === 'Sudah Cair' ? '📦' : '🔵'}</span>
+                                                <div className="min-w-0">
+                                                  <span className={`font-bold ${r.selesai ? 'text-green-600 line-through' : r.status === 'Revisi' ? 'text-red-600' : r.status === 'Ditunda' ? 'text-orange-600' : r.status === 'Sudah Cair' ? 'text-teal-600' : 'text-blue-600'}`}>[{r.status} {r.tanggal}]</span>
+                                                  <span className={`ml-1 ${r.selesai ? 'text-green-500 line-through' : 'text-gray-600'}`}>{r.catatan || '(tanpa catatan)'}</span>
+                                                  {r.selesai && <span className="ml-1 text-green-600 font-bold text-xs">— Selesai</span>}
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    )}
+                                    </React.Fragment>
+                                    );
+                                  })}
                                 </tbody>
                                 <tfoot>
                                   <tr className="bg-teal-50 font-bold text-sm">
