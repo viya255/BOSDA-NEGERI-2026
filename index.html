@@ -1189,7 +1189,14 @@ function extractRekening(kodeRaw) {
           const parseNominalFleksibel = (v) => {
             if (v === null || v === undefined) return 0;
             if (typeof v === 'number') return Math.round(v);
-            const digits = String(v).replace(/[^\d]/g, '');
+            // PENTING: format uang Indonesia pakai titik = pemisah ribuan, koma = desimal
+            // (mis. "800.000,00" = delapan ratus ribu). Kalau titik & koma dibuang bareng
+            // tanpa dibedakan, "800.000,00" salah kebaca jadi 80.000.000 (salah 100x lipat).
+            // Jadi bagian desimal (koma + digit di akhir, umumnya ",00") dibuang dulu,
+            // baru sisanya (termasuk titik ribuan) dibersihkan.
+            let s = String(v).trim();
+            s = s.replace(/,\d+$/, '');
+            const digits = s.replace(/[^\d]/g, '');
             return digits ? parseInt(digits, 10) : 0;
           };
           const ekstrakNomorSekolah = (s) => {
@@ -1369,23 +1376,43 @@ function extractRekening(kodeRaw) {
                       .filter(it => it.str && it.str.trim())
                       .map(it => ({ str: it.str.trim(), x: it.transform[4], y: it.transform[5] }));
                     potongan.sort((a, b) => b.y - a.y || a.x - b.x);
-                    const TOLERANSI_Y = 2.5; // px — cukup untuk menyatukan 1 baris tabel, tidak akan menyatukan 2 baris berbeda (jarak antar baris biasanya ~15-20px)
+                    // PENTING: dalam SATU baris tabel yang sama, baseline tiap kolom teks
+                    // ternyata tidak selalu persis sama tingginya — kolom REG (paling kiri)
+                    // dan kolom BELANJA (paling kanan) bisa punya y sedikit lebih rendah
+                    // (selisih bisa sampai ~2.7px) dibanding kolom tengah (nama sekolah,
+                    // kecamatan, nominal). Kalau toleransi cuma dibandingkan ke titik
+                    // PERTAMA di baris (anchor tetap) dengan batas 2.5px, potongan di ujung
+                    // baris (REG & BELANJA) bisa "kelewat" dianggap beda baris — hasilnya
+                    // satu baris tabel malah kepecah dua (REG+BELANJA nyangkut di baris lain,
+                    // regex jadi gagal cocok karena barisnya tidak diawali angka REG lagi).
+                    // Perbaikan: bandingkan tiap potongan ke potongan TERAKHIR yang baru
+                    // masuk ke baris itu (rolling, bukan anchor tetap), dan sedikit naikkan
+                    // toleransi. Jarak antar baris tabel yang beneran beda masih jauh lebih
+                    // lebar (~15-20px) jadi tetap aman, tidak akan menyatukan 2 baris berbeda.
+                    const TOLERANSI_Y = 4;
                     let barisSaatIni = null;
+                    let yTerakhirDiBaris = null;
                     potongan.forEach(p => {
-                      if (barisSaatIni && Math.abs(barisSaatIni.y - p.y) <= TOLERANSI_Y) {
+                      if (barisSaatIni && Math.abs(yTerakhirDiBaris - p.y) <= TOLERANSI_Y) {
                         barisSaatIni.items.push(p);
+                        yTerakhirDiBaris = p.y;
                       } else {
                         barisSaatIni = { y: p.y, items: [p] };
                         semuaBaris.push(barisSaatIni);
+                        yTerakhirDiBaris = p.y;
                       }
                     });
                   }
                   const teksBaris = semuaBaris.map(b => b.items.sort((a, c) => a.x - c.x).map(p => p.str).join(' '));
 
-                  // Sekarang tiap elemen teksBaris idealnya = "REG NAMA_SEKOLAH KECAMATAN Rp<nominal> BELANJA"
+                  // Sekarang tiap elemen teksBaris idealnya = "REG NAMA_SEKOLAH KECAMATAN Rp<nominal> [KODE_REKENING] BELANJA"
                   // dalam satu baris yang sudah rapi. Cari baris yang cocok pola SPJ.
+                  // Kolom KODE REKENING (format "01.001.00039") sifatnya opsional -- sebagian
+                  // versi Tanda Terima punya kolom ini, sebagian tidak -- makanya ditangkap
+                  // sebagai grup terpisah, BUKAN ikut nyampur ke teks belanja, supaya bisa
+                  // dipakai untuk validasi silang (disambiguasi) seperti jalur Excel.
                   const rowRegex = new RegExp(
-                    '^\\\\d+\\\\s+((?:UPT\\\\s+)?(?:SD|SMP|SMA|SMK|TK|PAUD|SLB)[A-Za-z.]*\\\\s*(?:NEGERI\\\\s*)?\\\\d+)\\\\s+GRESIK\\\\s+.*?Rp\\\\s?([\\\\d.,]+)\\\\s*(.*)$',
+                    '^\\d+\\s+((?:UPT\\s+)?(?:SD|SMP|SMA|SMK|TK|PAUD|SLB)[A-Za-z.]*\\s*(?:NEGERI\\s*)?\\d+)\\s+GRESIK\\s+.*?(?:Rp\\s?)?([\\d]{1,3}(?:\\.\\d{3})*,\\d{2}|[\\d]{1,3}(?:\\.\\d{3})+|\\d+)\\s*(?:(\\d{2}\\.\\d{3}\\.\\d{5})\\s+)?(.*)$',
                     'i'
                   );
                   const baris = [];
@@ -1397,8 +1424,8 @@ function extractRekening(kodeRaw) {
                       sekolahNum: ekstrakNomorSekolah(sekolahRaw),
                       sekolahRaw,
                       nominal: parseNominalFleksibel(m[2]),
-                      belanja: m[3].trim(),
-                      kode4: '',
+                      kode4: m[3] ? ekstrak4DigitKode(m[3]) : '',
+                      belanja: m[4].trim(),
                     });
                   });
                   cocokkanDanCeklis(baris.filter(b => b.sekolahNum && b.nominal > 0));
@@ -1418,27 +1445,57 @@ function extractRekening(kodeRaw) {
             reader.onload = (evt) => {
               try {
                 const wb = XLSX.read(evt.target.result, { type: 'array' });
-                const sheet = wb.Sheets[wb.SheetNames[0]];
-                const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-                if (!rows.length) { alert('File kosong atau formatnya tidak terbaca.'); return; }
 
-                const headers = Object.keys(rows[0]);
-                const cariKolom = (keywords) => headers.find(h => keywords.some(k => h.toLowerCase().includes(k)));
-                const colSekolah = cariKolom(['nama sekolah', 'sekolah']);
-                const colNominal = cariKolom(['nilai ajuan', 'nominal', 'nilai']);
-                const colKode = cariKolom(['kode belanja']);
+                // PENTING: file GU sering berupa spreadsheet dengan banyak sheet (GU 1..GU 5,
+                // dst) dan tiap sheet punya baris JUDUL/RINGKASAN di atas baris header asli
+                // (contoh: "GU 5 : 18 JULI 2026   Rp980.380.000" di baris 1, header REG/NAMA
+                // SEKOLAH/NILAI AJUAN baru muncul di baris 2). Kalau kita asal ambil sheet
+                // pertama (wb.SheetNames[0]) dan asumsikan baris 1 = header, dua-duanya bisa
+                // salah: sheet yang kebaca jadi bukan yang dimaksud user, dan header "Nama
+                // Sekolah"/"Nilai Ajuan" gak pernah ketemu walau datanya ada di file.
+                // Solusinya: pindai SEMUA sheet, dan di tiap sheet pindai beberapa baris awal
+                // untuk menemukan baris yang benar-benar berisi header "nama sekolah" +
+                // "nilai ajuan" -- baru dari situ data ditarik ke bawah.
+                const cariKolom = (headers, keywords) => headers.findIndex(h => keywords.some(k => String(h).toLowerCase().includes(k)));
+                const MAKS_BARIS_SCAN_HEADER = 10;
 
-                if (!colSekolah || !colNominal) {
-                  alert('Tidak menemukan kolom "Nama Sekolah" dan/atau "Nilai Ajuan" di file ini. Pastikan header kolomnya ada.');
+                let hasilTerbaik = null; // { sheetName, idxSekolah, idxNominal, idxKode, headerRowIdx, aoa, jumlahBarisData }
+                for (const sheetName of wb.SheetNames) {
+                  const sheet = wb.Sheets[sheetName];
+                  const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', blankrows: false });
+                  const batasScan = Math.min(MAKS_BARIS_SCAN_HEADER, aoa.length);
+                  for (let i = 0; i < batasScan; i++) {
+                    const baris = aoa[i].map(c => String(c || ''));
+                    const idxSekolah = cariKolom(baris, ['nama sekolah', 'sekolah']);
+                    const idxNominal = cariKolom(baris, ['nilai ajuan', 'nominal', 'nilai']);
+                    if (idxSekolah !== -1 && idxNominal !== -1) {
+                      const idxKode = cariKolom(baris, ['kode belanja']);
+                      // Sheet dengan lebih banyak baris data di bawah headernya dianggap kandidat
+                      // terbaik (menghindari ke-pilih sheet kosong / sheet lain yang kebetulan
+                      // punya header serupa tapi datanya kosong).
+                      const jumlahBarisData = aoa.length - (i + 1);
+                      if (!hasilTerbaik || jumlahBarisData > hasilTerbaik.jumlahBarisData) {
+                        hasilTerbaik = { sheetName, idxSekolah, idxNominal, idxKode, headerRowIdx: i, aoa, jumlahBarisData };
+                      }
+                      break; // header ketemu di sheet ini, tidak perlu scan baris berikutnya di sheet yang sama
+                    }
+                  }
+                }
+
+                if (!hasilTerbaik) {
+                  alert('Tidak menemukan kolom "Nama Sekolah" dan/atau "Nilai Ajuan" di file ini (sudah dicek di semua sheet). Pastikan header kolomnya ada.');
                   return;
                 }
 
-                const baris = rows
+                const { aoa, idxSekolah, idxNominal, idxKode, headerRowIdx } = hasilTerbaik;
+                const dataRows = aoa.slice(headerRowIdx + 1);
+
+                const baris = dataRows
                   .map(r => ({
-                    sekolahNum: ekstrakNomorSekolah(r[colSekolah]),
-                    sekolahRaw: String(r[colSekolah] || '').trim(),
-                    nominal: parseNominalFleksibel(r[colNominal]),
-                    kode4: colKode ? ekstrak4DigitKode(r[colKode]) : '',
+                    sekolahNum: ekstrakNomorSekolah(r[idxSekolah]),
+                    sekolahRaw: String(r[idxSekolah] || '').trim(),
+                    nominal: parseNominalFleksibel(r[idxNominal]),
+                    kode4: idxKode !== -1 ? ekstrak4DigitKode(r[idxKode]) : '',
                   }))
                   .filter(b => b.sekolahNum && b.nominal > 0);
 
