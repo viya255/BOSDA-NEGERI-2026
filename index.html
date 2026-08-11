@@ -1420,12 +1420,23 @@ function extractRekening(kodeRaw) {
                     const m = line.match(rowRegex);
                     if (!m) return;
                     const sekolahRaw = m[1].trim();
+                    // PENTING: kolom "KODE REKENING" di PDF (format "01.001.00039") ternyata
+                    // memakai skema penomoran yang BEDA dari "Kode Belanja" di sistem (format
+                    // "5.1.02.01.01.0034"). Sudah dicek dengan data asli: SPJ yang sekolah &
+                    // nominalnya cocok persis di sistem, kode rekening PDF-nya "0039" sementara
+                    // kode belanja sistemnya "0034" -- angkanya memang tidak berkorelasi. Kalau
+                    // kode ini dipaksa WAJIB cocok (seperti kolom "Kode Belanja" di jalur Excel),
+                    // SPJ yang sebenarnya sudah benar malah salah dianggap "tidak ditemukan".
+                    // Makanya di sini kode rekening TIDAK dipakai sebagai syarat wajib -- cukup
+                    // digabung ke teks belanja, supaya tetap lewat jalur pencocokan teks yang
+                    // sifatnya cuma menyempitkan pilihan (bukan menolak satu-satunya kandidat).
+                    const belanjaGabung = m[3] ? (m[3] + ' ' + m[4]).trim() : m[4].trim();
                     baris.push({
                       sekolahNum: ekstrakNomorSekolah(sekolahRaw),
                       sekolahRaw,
                       nominal: parseNominalFleksibel(m[2]),
-                      kode4: m[3] ? ekstrak4DigitKode(m[3]) : '',
-                      belanja: m[4].trim(),
+                      kode4: '',
+                      belanja: belanjaGabung,
                     });
                   });
                   cocokkanDanCeklis(baris.filter(b => b.sekolahNum && b.nominal > 0));
