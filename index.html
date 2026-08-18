@@ -972,7 +972,7 @@ function extractRekening(kodeRaw) {
               setActiveTab('verifikasi');
               // Sinkron ke SheetBest (opsional, tidak blok kalau gagal)
               try {
-                await fetch('https://script.google.com/macros/s/AKfycbw7Bg-nPUQxOtyWJgUQKp0VaSE4SadAXr-iqkJLjSjiuR_jAtZsEHrxAk7SXnf42Hleqw/exec', {
+                await fetch('https://script.google.com/macros/s/AKfycbwXFVMeBzgQbSbfPokJRQqiPiYoxFtVplWqNPsBl2BBLzirEMXgIKe5kti-vjYeBH5BSw/exec', {
                   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newSpj),
                 });
               } catch (sheetErr) {
@@ -1002,7 +1002,7 @@ function extractRekening(kodeRaw) {
               alert('Status berhasil diperbarui!');
               // Sinkron ke SheetBest (opsional)
               try {
-                await fetch(`https://script.google.com/macros/s/AKfycbw7Bg-nPUQxOtyWJgUQKp0VaSE4SadAXr-iqkJLjSjiuR_jAtZsEHrxAk7SXnf42Hleqw/exec?id=${selectedSpj.id}`, {
+                await fetch(`https://script.google.com/macros/s/AKfycbwXFVMeBzgQbSbfPokJRQqiPiYoxFtVplWqNPsBl2BBLzirEMXgIKe5kti-vjYeBH5BSw/exec?id=${selectedSpj.id}`, {
                   method: 'POST', headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({...updatePayload, _method: 'PATCH', _id: selectedSpj.id}),
                 });
@@ -1024,7 +1024,7 @@ function extractRekening(kodeRaw) {
               alert('Berhasil dihapus!');
               // Sinkron hapus ke SheetBest (opsional)
               try {
-                await fetch(`https://script.google.com/macros/s/AKfycbw7Bg-nPUQxOtyWJgUQKp0VaSE4SadAXr-iqkJLjSjiuR_jAtZsEHrxAk7SXnf42Hleqw/exec?id=${id}`, {
+                await fetch(`https://script.google.com/macros/s/AKfycbwXFVMeBzgQbSbfPokJRQqiPiYoxFtVplWqNPsBl2BBLzirEMXgIKe5kti-vjYeBH5BSw/exec?id=${id}`, {
                   method: 'POST', headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({_method: 'DELETE', _id: id})
                 });
@@ -1094,7 +1094,7 @@ function extractRekening(kodeRaw) {
                 if (statusBerubah && editingSpj.status === 'Sudah Cair' && editedStatus !== 'Sudah Cair') {
                   payloadSync.gu = ''; payloadSync.tanggalCair = '';
                 }
-                await fetch(`https://script.google.com/macros/s/AKfycbw7Bg-nPUQxOtyWJgUQKp0VaSE4SadAXr-iqkJLjSjiuR_jAtZsEHrxAk7SXnf42Hleqw/exec?id=${editingSpj.id}`, {
+                await fetch(`https://script.google.com/macros/s/AKfycbwXFVMeBzgQbSbfPokJRQqiPiYoxFtVplWqNPsBl2BBLzirEMXgIKe5kti-vjYeBH5BSw/exec?id=${editingSpj.id}`, {
                   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payloadSync),
                 });
               } catch (sheetErr) {
@@ -1139,7 +1139,7 @@ function extractRekening(kodeRaw) {
                 return merged;
               }));
               try {
-                await fetch(`https://script.google.com/macros/s/AKfycbw7Bg-nPUQxOtyWJgUQKp0VaSE4SadAXr-iqkJLjSjiuR_jAtZsEHrxAk7SXnf42Hleqw/exec?id=${quickStatusSpj.id}`, {
+                await fetch(`https://script.google.com/macros/s/AKfycbwXFVMeBzgQbSbfPokJRQqiPiYoxFtVplWqNPsBl2BBLzirEMXgIKe5kti-vjYeBH5BSw/exec?id=${quickStatusSpj.id}`, {
                   method: 'POST', headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ status: quickStatusValue, gu: '', tanggalCair: '', _method: 'PATCH', _id: quickStatusSpj.id }),
                 });
@@ -1593,7 +1593,7 @@ function extractRekening(kodeRaw) {
               // Sinkron ke SheetBest (opsional, per item, tidak blok kalau gagal)
               spjTerpilih.forEach(async (spj) => {
                 try {
-                  await fetch(`https://script.google.com/macros/s/AKfycbw7Bg-nPUQxOtyWJgUQKp0VaSE4SadAXr-iqkJLjSjiuR_jAtZsEHrxAk7SXnf42Hleqw/exec?id=${spj.id}`, {
+                  await fetch(`https://script.google.com/macros/s/AKfycbwXFVMeBzgQbSbfPokJRQqiPiYoxFtVplWqNPsBl2BBLzirEMXgIKe5kti-vjYeBH5BSw/exec?id=${spj.id}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ status: 'Sudah Cair', gu: guFinal, tanggalCair: today, _method: 'PATCH', _id: spj.id }),
                   });
@@ -2595,7 +2595,7 @@ function extractRekening(kodeRaw) {
               // Sinkron ke SheetBest (opsional, per item, tidak blok kalau gagal)
               listSpj.forEach(async (spj) => {
                 try {
-                  await fetch(`https://script.google.com/macros/s/AKfycbw7Bg-nPUQxOtyWJgUQKp0VaSE4SadAXr-iqkJLjSjiuR_jAtZsEHrxAk7SXnf42Hleqw/exec?id=${spj.id}`, {
+                  await fetch(`https://script.google.com/macros/s/AKfycbwXFVMeBzgQbSbfPokJRQqiPiYoxFtVplWqNPsBl2BBLzirEMXgIKe5kti-vjYeBH5BSw/exec?id=${spj.id}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tanggalCair: editingTglCairValue, _method: 'PATCH', _id: spj.id }),
                   });
@@ -2643,7 +2643,7 @@ function extractRekening(kodeRaw) {
               // Sinkron ke SheetBest (opsional, per item, tidak blok kalau gagal)
               listSpj.forEach(async (spj) => {
                 try {
-                  await fetch(`https://script.google.com/macros/s/AKfycbw7Bg-nPUQxOtyWJgUQKp0VaSE4SadAXr-iqkJLjSjiuR_jAtZsEHrxAk7SXnf42Hleqw/exec?id=${spj.id}`, {
+                  await fetch(`https://script.google.com/macros/s/AKfycbwXFVMeBzgQbSbfPokJRQqiPiYoxFtVplWqNPsBl2BBLzirEMXgIKe5kti-vjYeBH5BSw/exec?id=${spj.id}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ gu: guBaru, _method: 'PATCH', _id: spj.id }),
                   });
