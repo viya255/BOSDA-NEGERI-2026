@@ -2683,17 +2683,17 @@ function extractRekening(kodeRaw) {
                         className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-sm"/>
                     </div>
 
-                    <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200 max-h-40 overflow-y-auto">
+                                       <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200 max-h-40 overflow-y-auto">
                       <p className="text-xs font-bold text-gray-500 mb-1.5">SPJ yang akan dicairkan:</p>
-                      <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200 max-h-40 overflow-y-auto">
-  <p className="text-xs font-bold text-gray-500 mb-1.5">SPJ yang akan dicairkan:</p>
-  {dataSpj.filter(s => selectedForCair[s._docId]).map(s => (
-    <div key={s._docId} className="text-xs text-gray-600 flex justify-between py-0.5">
-      <span>{s.id} — {s.sekolah}</span>
-      <span className="font-semibold">{formatRupiah(s.nominal)}</span>
-    </div>
-  ))}
-</div>
+                      {dataSpj.filter(s => selectedForCair[s._docId]).map(s => (
+                        <div key={s._docId} className="text-xs text-gray-600 flex justify-between py-0.5">
+                          <span>{s.id} — {s.sekolah}</span>
+                          <span className="font-semibold">{formatRupiah(s.nominal)}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                
 
                     <div className="flex justify-end space-x-2 pt-4 mt-2 border-t">
                       <button onClick={() => setIsCairModalOpen(false)} className="px-4 py-2 border rounded text-gray-600 font-medium">Batal</button>
