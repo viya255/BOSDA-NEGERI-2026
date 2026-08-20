@@ -810,19 +810,18 @@ function extractRekening(kodeRaw) {
             }
           };
 
-          const handleDeleteSpj = async (id) => {
-            if (!window.confirm('Yakin ingin hapus ID: ' + id + '?')) return;
-            const spjToDelete = dataSpj.find(spj => spj.id === id);
-            try {
-              if (spjToDelete && spjToDelete._docId) {
-                await db.collection("spj_bos_data").doc(spjToDelete._docId).delete();
-              }
-              alert('Berhasil dihapus!');
-            } catch (error) {
-              console.error('Error:', error);
-              alert('Terjadi kesalahan saat menghapus: ' + error.message);
-            }
-          };
+         const handleDeleteSpj = async (spj) => {
+  if (!window.confirm('Yakin ingin hapus ID: ' + spj.id + '?')) return;
+  try {
+    if (spj && spj._docId) {
+      await db.collection("spj_bos_data").doc(spj._docId).delete();
+    }
+    alert('Berhasil dihapus!');
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Terjadi kesalahan saat menghapus: ' + error.message);
+  }
+};
 
           const handleOpenEdit = (spj) => { setEditingSpj(spj); setIsEditModalOpen(true); };
 
@@ -915,12 +914,12 @@ function extractRekening(kodeRaw) {
             setSelectedForCair(prev => ({ ...prev, [id]: !prev[id] }));
           };
 
-          const toggleSelectAllForCair = (listSpj) => {
-            const allChecked = listSpj.length > 0 && listSpj.every(s => selectedForCair[s.id]);
-            const updated = { ...selectedForCair };
-            listSpj.forEach(s => { updated[s.id] = !allChecked; });
-            setSelectedForCair(updated);
-          };
+         const toggleSelectAllForCair = (listSpj) => {
+  const allChecked = listSpj.length > 0 && listSpj.every(s => selectedForCair[s._docId]);
+  const updated = { ...selectedForCair };
+  listSpj.forEach(s => { updated[s._docId] = !allChecked; });
+  setSelectedForCair(updated);
+};
 
           const guUploadInputRef = useRef(null);
           const [guUploadResult, setGuUploadResult] = useState(null);
@@ -955,77 +954,79 @@ function extractRekening(kodeRaw) {
           };
 
           const cocokkanDanCeklis = (baris) => {
-            if (!baris.length) { alert('Tidak ada baris data valid (Nama Sekolah + Nilai Ajuan) yang terbaca dari file ini.'); return; }
-            setLastUploadBaris(baris);
+  if (!baris.length) { alert('Tidak ada baris data valid (Nama Sekolah + Nilai Ajuan) yang terbaca dari file ini.'); return; }
+  setLastUploadBaris(baris);
 
-            const kandidat = dataSpj.filter(s => s.status === 'Siap Cair').map(s => ({
-              spj: s,
-              sekolahNum: ekstrakNomorSekolah(s.sekolah),
-              nominal: Number(s.nominal) || 0,
-              kode4: ekstrak4DigitKode(String(s.rincian || '').split(' ')[0]),
-              rincianText: String(s.rincian || '').toLowerCase(),
-            }));
+  const kandidat = dataSpj.filter(s => s.status === 'Siap Cair').map(s => ({
+    spj: s,
+    sekolahNum: ekstrakNomorSekolah(s.sekolah),
+    nominal: Number(s.nominal) || 0,
+    kode4: ekstrak4DigitKode(String(s.rincian || '').split(' ')[0]),
+    rincianText: String(s.rincian || '').toLowerCase(),
+  }));
 
-            const kandidatSemua = dataSpj.map(s => ({
-              spj: s,
-              sekolahNum: ekstrakNomorSekolah(s.sekolah),
-              nominal: Number(s.nominal) || 0,
-            }));
+  const kandidatSemua = dataSpj.map(s => ({
+    spj: s,
+    sekolahNum: ekstrakNomorSekolah(s.sekolah),
+    nominal: Number(s.nominal) || 0,
+  }));
 
-            const sudahDipakai = new Set();
-            const matched = [];
-            const notFound = [];
-            const ambiguous = [];
-            const belanjaBeda = [];
+  const sudahDipakai = new Set();
+  const matched = [];
+  const notFound = [];
+  const ambiguous = [];
+  const belanjaBeda = [];
 
-            baris.forEach(b => {
-              let opsi = kandidat.filter(k =>
-                k.sekolahNum === b.sekolahNum && k.nominal === b.nominal && !sudahDipakai.has(k.spj.id)
-              );
-              if (b.kode4) {
-                opsi = opsi.filter(k => k.kode4 === b.kode4);
-              }
-              if (opsi.length > 1 && b.belanja) {
-                const belanjaNorm = b.belanja.toLowerCase();
-                const opsiSempit = opsi.filter(k => k.rincianText && (belanjaNorm.includes(k.rincianText) || k.rincianText.includes(belanjaNorm)));
-                if (opsiSempit.length >= 1) opsi = opsiSempit;
-              }
-              if (opsi.length === 1) {
-                sudahDipakai.add(opsi[0].spj.id);
-                matched.push(opsi[0].spj.id);
-                if (b.belanja) {
-                  const belanjaNorm = b.belanja.toLowerCase();
-                  const rt = opsi[0].rincianText;
-                  const cocokTeks = rt && (belanjaNorm.includes(rt) || rt.includes(belanjaNorm));
-                  if (!cocokTeks) {
-                    belanjaBeda.push({ spjId: opsi[0].spj.id, sekolahRaw: b.sekolahRaw, nominal: b.nominal, belanjaFile: b.belanja, rincianSistem: opsi[0].spj.rincian });
-                  }
-                }
-              } else if (opsi.length === 0) {
-                const lain = kandidatSemua.find(k => k.sekolahNum === b.sekolahNum && k.nominal === b.nominal);
-                let statusLain = null;
-                let spjIdLain = null;
-                if (lain) {
-                  spjIdLain = lain.spj.id;
-                  if (lain.spj.status === 'Siap Cair' && sudahDipakai.has(lain.spj.id)) {
-                    statusLain = 'DUPLIKAT_DI_FILE';
-                  } else {
-                    statusLain = lain.spj.status === 'Sudah Cair' && lain.spj.gu
-                      ? `Sudah Cair (${lain.spj.gu})`
-                      : lain.spj.status;
-                  }
-                }
-                notFound.push({ sekolahRaw: b.sekolahRaw, nominal: b.nominal, statusLain, spjIdLain });
-              } else {
-                ambiguous.push({ sekolahRaw: b.sekolahRaw, nominal: b.nominal, jumlahOpsi: opsi.length });
-              }
-            });
+  baris.forEach(b => {
+    let opsi = kandidat.filter(k =>
+      k.sekolahNum === b.sekolahNum && k.nominal === b.nominal && !sudahDipakai.has(k.spj._docId)
+    );
+    if (b.kode4) {
+      opsi = opsi.filter(k => k.kode4 === b.kode4);
+    }
+    if (opsi.length > 1 && b.belanja) {
+      const belanjaNorm = b.belanja.toLowerCase();
+      const opsiSempit = opsi.filter(k => k.rincianText && (belanjaNorm.includes(k.rincianText) || k.rincianText.includes(belanjaNorm)));
+      if (opsiSempit.length >= 1) opsi = opsiSempit;
+    }
+    if (opsi.length === 1) {
+      sudahDipakai.add(opsi[0].spj._docId);
+      matched.push(opsi[0].spj._docId);
+      if (b.belanja) {
+        const belanjaNorm = b.belanja.toLowerCase();
+        const rt = opsi[0].rincianText;
+        const cocokTeks = rt && (belanjaNorm.includes(rt) || rt.includes(belanjaNorm));
+        if (!cocokTeks) {
+          belanjaBeda.push({ spjId: opsi[0].spj.id, docId: opsi[0].spj._docId, sekolahRaw: b.sekolahRaw, nominal: b.nominal, belanjaFile: b.belanja, rincianSistem: opsi[0].spj.rincian });
+        }
+      }
+    } else if (opsi.length === 0) {
+      const lain = kandidatSemua.find(k => k.sekolahNum === b.sekolahNum && k.nominal === b.nominal);
+      let statusLain = null;
+      let spjIdLain = null;
+      let docIdLain = null;
+      if (lain) {
+        spjIdLain = lain.spj.id;
+        docIdLain = lain.spj._docId;
+        if (lain.spj.status === 'Siap Cair' && sudahDipakai.has(lain.spj._docId)) {
+          statusLain = 'DUPLIKAT_DI_FILE';
+        } else {
+          statusLain = lain.spj.status === 'Sudah Cair' && lain.spj.gu
+            ? `Sudah Cair (${lain.spj.gu})`
+            : lain.spj.status;
+        }
+      }
+      notFound.push({ sekolahRaw: b.sekolahRaw, nominal: b.nominal, statusLain, spjIdLain, docIdLain });
+    } else {
+      ambiguous.push({ sekolahRaw: b.sekolahRaw, nominal: b.nominal, jumlahOpsi: opsi.length });
+    }
+  });
 
-            const updated = {};
-            matched.forEach(id => { updated[id] = true; });
-            setSelectedForCair(updated);
-            setGuUploadResult({ matched: matched.length, notFound, ambiguous, belanjaBeda, totalRow: baris.length });
-          };
+  const updated = {};
+  matched.forEach(docId => { updated[docId] = true; });
+  setSelectedForCair(updated);
+  setGuUploadResult({ matched: matched.length, notFound, ambiguous, belanjaBeda, totalRow: baris.length });
+};
 
           const refreshHasilUpload = () => {
             if (lastUploadBaris && lastUploadBaris.length) cocokkanDanCeklis(lastUploadBaris);
@@ -1033,38 +1034,38 @@ function extractRekening(kodeRaw) {
 
           const [prosesVerifikasiMassal, setProsesVerifikasiMassal] = useState(false);
           const verifikasiMassal = async (items, statusAsal) => {
-            const idList = [...new Set(items.map(n => n.spjIdLain).filter(Boolean))];
-            if (!idList.length) return;
-            const konfirmasi = window.confirm(
-              `Anda akan mengubah ${idList.length} SPJ berstatus "${statusAsal}" menjadi "Siap Cair" SEKALIGUS.\n\nLanjutkan?`
-            );
-            if (!konfirmasi) return;
+  const docIdList = [...new Set(items.map(n => n.docIdLain).filter(Boolean))];
+  if (!docIdList.length) return;
+  const konfirmasi = window.confirm(
+    `Anda akan mengubah ${docIdList.length} SPJ berstatus "${statusAsal}" menjadi "Siap Cair" SEKALIGUS.\n\nLanjutkan?`
+  );
+  if (!konfirmasi) return;
 
-            setProsesVerifikasiMassal(true);
-            const today = new Date().toISOString().split('T')[0];
-            const catatanMassal = `Diverifikasi massal ke Siap Cair via pencocokan file upload GU (${today})`;
-            try {
-              const batch = db.batch();
-              const idsBerhasil = [];
-              idList.forEach(id => {
-                const spj = dataSpjRaw.find(s => s.id === id);
-                if (!spj || !spj._docId) return;
-                const riwayatBaru = [...(spj.riwayatRevisi || []), { tanggal: today, status: 'Siap Cair', catatan: catatanMassal }];
-                batch.update(db.collection("spj_bos_data").doc(spj._docId), { status: 'Siap Cair', catatan: '', riwayatRevisi: riwayatBaru, tanggal: today });
-                idsBerhasil.push(id);
-              });
-              await batch.commit();
+  setProsesVerifikasiMassal(true);
+  const today = new Date().toISOString().split('T')[0];
+  const catatanMassal = `Diverifikasi massal ke Siap Cair via pencocokan file upload GU (${today})`;
+  try {
+    const batch = db.batch();
+    const docIdsBerhasil = [];
+    docIdList.forEach(docId => {
+      const spj = dataSpjRaw.find(s => s._docId === docId);
+      if (!spj || !spj._docId) return;
+      const riwayatBaru = [...(spj.riwayatRevisi || []), { tanggal: today, status: 'Siap Cair', catatan: catatanMassal }];
+      batch.update(db.collection("spj_bos_data").doc(spj._docId), { status: 'Siap Cair', catatan: '', riwayatRevisi: riwayatBaru, tanggal: today });
+      docIdsBerhasil.push(docId);
+    });
+    await batch.commit();
 
-              setDataSpjRaw(prev => prev.map(spj => idsBerhasil.includes(spj.id) ? { ...spj, status: 'Siap Cair', catatan: '', tanggal: today } : spj));
-              alert(`${idsBerhasil.length} SPJ berhasil dipindah ke Siap Cair.`);
-              refreshHasilUpload();
-            } catch (err) {
-              console.error(err);
-              alert('Gagal melakukan verifikasi massal: ' + err.message);
-            } finally {
-              setProsesVerifikasiMassal(false);
-            }
-          };
+    setDataSpjRaw(prev => prev.map(spj => docIdsBerhasil.includes(spj._docId) ? { ...spj, status: 'Siap Cair', catatan: '', tanggal: today } : spj));
+    alert(`${docIdsBerhasil.length} SPJ berhasil dipindah ke Siap Cair.`);
+    refreshHasilUpload();
+  } catch (err) {
+    console.error(err);
+    alert('Gagal melakukan verifikasi massal: ' + err.message);
+  } finally {
+    setProsesVerifikasiMassal(false);
+  }
+};
 
           const handleUploadGuExcel = (e) => {
             const file = e.target.files && e.target.files[0];
@@ -1234,37 +1235,37 @@ function extractRekening(kodeRaw) {
             setIsCairModalOpen(true);
           };
 
-          const submitPencairan = async () => {
-            const guFinal = guMode === 'baru' ? guBaruText.trim() : guPilihan;
-            if (!guFinal) { alert('Nama/nomor GU wajib diisi!'); return; }
-            if (!tanggalCairInput) { alert('Tanggal pencairan wajib diisi!'); return; }
-            const idsTerpilih = Object.keys(selectedForCair).filter(id => selectedForCair[id]);
-            const spjTerpilih = dataSpj.filter(s => idsTerpilih.includes(s.id));
-            if (spjTerpilih.length === 0) { alert('Tidak ada SPJ yang dipilih.'); return; }
+         const submitPencairan = async () => {
+  const guFinal = guMode === 'baru' ? guBaruText.trim() : guPilihan;
+  if (!guFinal) { alert('Nama/nomor GU wajib diisi!'); return; }
+  if (!tanggalCairInput) { alert('Tanggal pencairan wajib diisi!'); return; }
+  const docIdsTerpilih = Object.keys(selectedForCair).filter(docId => selectedForCair[docId]);
+  const spjTerpilih = dataSpj.filter(s => docIdsTerpilih.includes(s._docId));
+  if (spjTerpilih.length === 0) { alert('Tidak ada SPJ yang dipilih.'); return; }
 
-            const today = tanggalCairInput;
-            setIsLoading(true);
-            try {
-              const batch = db.batch();
-              spjTerpilih.forEach(spj => {
-                if (!spj._docId) return;
-                const docRef = db.collection("spj_bos_data").doc(spj._docId);
-                const riwayatBaru = [...(spj.riwayatRevisi || []), { tanggal: today, status: 'Sudah Cair', catatan: `Dicairkan pada ${guFinal}` }];
-                batch.update(docRef, { status: 'Sudah Cair', gu: guFinal, tanggalCair: today, riwayatRevisi: riwayatBaru, tanggal: today });
-              });
-              await batch.commit();
+  const today = tanggalCairInput;
+  setIsLoading(true);
+  try {
+    const batch = db.batch();
+    spjTerpilih.forEach(spj => {
+      if (!spj._docId) return;
+      const docRef = db.collection("spj_bos_data").doc(spj._docId);
+      const riwayatBaru = [...(spj.riwayatRevisi || []), { tanggal: today, status: 'Sudah Cair', catatan: `Dicairkan pada ${guFinal}` }];
+      batch.update(docRef, { status: 'Sudah Cair', gu: guFinal, tanggalCair: today, riwayatRevisi: riwayatBaru, tanggal: today });
+    });
+    await batch.commit();
 
-              setSelectedForCair({});
-              setIsCairModalOpen(false);
-              alert(`${spjTerpilih.length} SPJ berhasil dicairkan pada ${guFinal}!`);
-              setActiveTab('sudahCair');
-            } catch (error) {
-              console.error('Error:', error);
-              alert('Terjadi kesalahan saat memproses pencairan: ' + error.message);
-            } finally {
-              setIsLoading(false);
-            }
-          };
+    setSelectedForCair({});
+    setIsCairModalOpen(false);
+    alert(`${spjTerpilih.length} SPJ berhasil dicairkan pada ${guFinal}!`);
+    setActiveTab('sudahCair');
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Terjadi kesalahan saat memproses pencairan: ' + error.message);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
           const downloadExcel = (dataToDownload) => {
             if (dataToDownload.length === 0) { alert("Tidak ada data untuk diunduh."); return; }
@@ -1500,7 +1501,7 @@ function extractRekening(kodeRaw) {
                     {selectableForCair && !isViewOnly && (
                       <th className="p-4 font-semibold w-10">
                         <input type="checkbox"
-                          checked={data.length > 0 && data.every(s => selectedForCair[s.id])}
+                          checked={data.length > 0 && data.every(s => selectedForCair[s._docId])}
                           onChange={() => toggleSelectAllForCair(data)}
                           className="w-4 h-4 accent-teal-600 cursor-pointer"/>
                       </th>
@@ -1514,13 +1515,13 @@ function extractRekening(kodeRaw) {
                 </thead>
                 <tbody className="text-sm">
                   {data.length === 0 ? <tr><td colSpan={selectableForCair ? 6 : 5} className="p-8 text-center text-gray-500">Tidak ada data.</td></tr> : data.map((spj) => (
-                    <tr key={spj.id} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${selectableForCair && selectedForCair[spj.id] ? 'bg-teal-50' : ''}`}>
-                      {selectableForCair && !isViewOnly && (
-                        <td className="p-4">
-                          <input type="checkbox" checked={!!selectedForCair[spj.id]} onChange={() => toggleSelectForCair(spj.id)}
-                            className="w-4 h-4 accent-teal-600 cursor-pointer"/>
-                        </td>
-                      )}
+                      <tr key={spj._docId || spj.id} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${selectableForCair && selectedForCair[spj._docId] ? 'bg-teal-50' : ''}`}>
+                        {selectableForCair && !isViewOnly && (
+                          <td className="p-4">
+                            <input type="checkbox" checked={!!selectedForCair[spj._docId]} onChange={() => toggleSelectForCair(spj._docId)}
+                              className="w-4 h-4 accent-teal-600 cursor-pointer"/>
+                          </td>
+                        )}
                       <td className="p-4 font-medium text-gray-800">{spj.id}<br/><span className="text-xs text-gray-500 font-normal flex items-center mt-1"><IconClock size={12} className="mr-1"/>{spj.tanggal}</span></td>
                       <td className="p-4 font-medium text-gray-800">{spj.sekolah}<br/><span className="text-xs text-gray-500 font-normal flex items-center mt-1"><IconMapPin size={12} className="mr-1"/> Kec. {spj.kecamatan} (PIC: {spj.pic}) • {spj.triwulan}</span></td>
                       <td className="p-4 max-w-xs"><div className="font-bold text-blue-700">{formatRupiah(spj.nominal)}</div><div className="text-xs text-gray-500 truncate mt-1" title={spj.rincian}>{spj.rincian}</div></td>
@@ -1552,7 +1553,7 @@ function extractRekening(kodeRaw) {
                           <div className="flex justify-end space-x-1.5 flex-wrap gap-y-1">
                             {showVerifyAction && <button onClick={() => openVerifyModal(spj)} className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconClipboardCheck size={14} className="mr-1 hidden sm:block"/> Koreksi</button>}
                             <button onClick={() => handleOpenEdit(spj)} className="bg-amber-50 text-amber-600 hover:bg-amber-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconEdit size={14} className="mr-1 hidden sm:block"/> Edit</button>
-                            <button onClick={() => handleDeleteSpj(spj.id)} className="bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconTrash size={14} className="mr-1 hidden sm:block"/> Hapus</button>
+                            <button onClick={() => handleDeleteSpj(spj)} className="bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition"><IconTrash size={14} className="mr-1 hidden sm:block"/> Hapus</button>
                           </div>
                         )}
                       </td>
@@ -2324,9 +2325,9 @@ function extractRekening(kodeRaw) {
                                           <button onClick={() => handleOpenEdit(spj)} className="bg-orange-50 text-orange-600 hover:bg-orange-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition mr-1">
                                             <IconEdit size={13} className="mr-1"/> Edit
                                           </button>
-                                          <button onClick={() => handleDeleteSpj(spj.id)} className="bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition">
-                                            <IconTrash size={13} className="mr-1"/> Hapus
-                                          </button>
+                                         <button onClick={() => handleDeleteSpj(spj)} className="bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1.5 rounded text-xs font-bold inline-flex items-center transition">
+  <IconTrash size={13} className="mr-1"/> Hapus
+</button>
                                         </td>
                                       )}
                                     </tr>
@@ -2684,13 +2685,15 @@ function extractRekening(kodeRaw) {
 
                     <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200 max-h-40 overflow-y-auto">
                       <p className="text-xs font-bold text-gray-500 mb-1.5">SPJ yang akan dicairkan:</p>
-                      {dataSpj.filter(s => selectedForCair[s.id]).map(s => (
-                        <div key={s.id} className="text-xs text-gray-600 flex justify-between py-0.5">
-                          <span>{s.id} — {s.sekolah}</span>
-                          <span className="font-semibold">{formatRupiah(s.nominal)}</span>
-                        </div>
-                      ))}
-                    </div>
+                      <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200 max-h-40 overflow-y-auto">
+  <p className="text-xs font-bold text-gray-500 mb-1.5">SPJ yang akan dicairkan:</p>
+  {dataSpj.filter(s => selectedForCair[s._docId]).map(s => (
+    <div key={s._docId} className="text-xs text-gray-600 flex justify-between py-0.5">
+      <span>{s.id} — {s.sekolah}</span>
+      <span className="font-semibold">{formatRupiah(s.nominal)}</span>
+    </div>
+  ))}
+</div>
 
                     <div className="flex justify-end space-x-2 pt-4 mt-2 border-t">
                       <button onClick={() => setIsCairModalOpen(false)} className="px-4 py-2 border rounded text-gray-600 font-medium">Batal</button>
