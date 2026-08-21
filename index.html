@@ -573,6 +573,7 @@ function extractRekening(kodeRaw) {
           const [editingGuNama, setEditingGuNama] = useState(null);
           const [editingGuNamaValue, setEditingGuNamaValue] = useState('');
           const [tercentangDiAtas, setTercentangDiAtas] = useState(true);
+          const [highlightDocId, setHighlightDocId] = useState(null);
 
           useEffect(() => {
             const unsubscribe = db.collection("spj_bos_data")
@@ -610,6 +611,23 @@ function extractRekening(kodeRaw) {
               window.rakDataGlobal = rakData;
             }
           }, [rakData]);
+
+          useEffect(() => {
+            if (!highlightDocId) return;
+            let tries = 0;
+            const tryScroll = () => {
+              const el = document.getElementById(`spj-row-${highlightDocId}`);
+              if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              } else if (tries < 15) {
+                tries += 1;
+                setTimeout(tryScroll, 150);
+              }
+            };
+            const t0 = setTimeout(tryScroll, 150);
+            const t1 = setTimeout(() => setHighlightDocId(null), 3500);
+            return () => { clearTimeout(t0); clearTimeout(t1); };
+          }, [highlightDocId, activeTab]);
 
           const parseNominal = (val) => {
             if (!val || val === '-' || val === '') return 0;
@@ -1016,7 +1034,7 @@ function extractRekening(kodeRaw) {
             : lain.spj.status;
         }
       }
-      notFound.push({ sekolahRaw: b.sekolahRaw, nominal: b.nominal, statusLain, spjIdLain, docIdLain });
+      notFound.push({ sekolahRaw: b.sekolahRaw, nominal: b.nominal, belanja: b.belanja || '', statusLain, spjIdLain, docIdLain });
     } else {
       ambiguous.push({ sekolahRaw: b.sekolahRaw, nominal: b.nominal, jumlahOpsi: opsi.length });
     }
@@ -1195,20 +1213,44 @@ function extractRekening(kodeRaw) {
             'Siap Cair': 'siapCair',
           };
           const gotoNotFoundItem = (item) => {
-            if (!item.spjIdLain) return;
+            if (!item.docIdLain) return;
+
+            // Bersihkan semua filter/pencarian teks supaya barisnya pasti tampil,
+            // lalu loncat & sorot langsung ke barisnya (bukan lewat cari ID).
+            setSearchQuery('');
+            setSudahCairSearch('');
+            setFilterKecamatan('Semua');
+            setFilterPic('Semua');
+            setFilterTriwulan('Semua');
+
             if (item.statusLain === 'DUPLIKAT_DI_FILE') {
               setActiveTab('siapCair');
-              setSearchQuery(item.spjIdLain);
+              setHighlightDocId(item.docIdLain);
               return;
             }
             if (item.statusLain && item.statusLain.startsWith('Sudah Cair')) {
               setActiveTab('sudahCair');
-              setSearchQuery(item.spjIdLain);
+              const spjTarget = dataSpjRaw.find(s => s._docId === item.docIdLain);
+              const guKey = spjTarget && spjTarget.gu ? spjTarget.gu : 'Tanpa GU';
+              setExpandedGu(prev => ({ ...prev, [guKey]: true }));
+              setHighlightDocId(item.docIdLain);
               return;
             }
             const tujuanTab = STATUS_KE_TAB[item.statusLain];
             if (tujuanTab) setActiveTab(tujuanTab);
-            setSearchQuery(item.spjIdLain);
+            setHighlightDocId(item.docIdLain);
+          };
+
+          const gotoAmbiguous = (item) => {
+            // Beberapa kandidat cocok (sekolah & nominal sama) - tidak bisa dipilihkan otomatis,
+            // jadi arahkan ke tab Siap Cair dan saring pakai nominal supaya opsi-opsinya kelihatan
+            // untuk dicentang manual (bukan dicari lewat ID).
+            setSudahCairSearch('');
+            setFilterKecamatan('Semua');
+            setFilterPic('Semua');
+            setFilterTriwulan('Semua');
+            setActiveTab('siapCair');
+            setSearchQuery(String(item.nominal || ''));
           };
 
           const jumlahTerpilih = Object.values(selectedForCair).filter(Boolean).length;
@@ -1515,7 +1557,7 @@ function extractRekening(kodeRaw) {
                 </thead>
                 <tbody className="text-sm">
                   {data.length === 0 ? <tr><td colSpan={selectableForCair ? 6 : 5} className="p-8 text-center text-gray-500">Tidak ada data.</td></tr> : data.map((spj) => (
-                      <tr key={spj._docId || spj.id} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${selectableForCair && selectedForCair[spj._docId] ? 'bg-teal-50' : ''}`}>
+                      <tr key={spj._docId || spj.id} id={`spj-row-${spj._docId}`} className={`border-b border-gray-100 transition-colors ${highlightDocId === spj._docId ? 'bg-yellow-200 ring-2 ring-yellow-400 ring-inset' : selectableForCair && selectedForCair[spj._docId] ? 'bg-teal-50 hover:bg-gray-50' : 'hover:bg-gray-50'}`}>
                         {selectableForCair && !isViewOnly && (
                           <td className="p-4">
                             <input type="checkbox" checked={!!selectedForCair[spj._docId]} onChange={() => toggleSelectForCair(spj._docId)}
@@ -2074,6 +2116,95 @@ function extractRekening(kodeRaw) {
                             <button onClick={hapusPilihanUpload} className="text-red-500 hover:text-red-700 underline px-1">🗑️ hapus pilihan upload</button>
                           </div>
                         </div>
+
+                        {!guPanelCollapsed && (
+                          <div className="mt-3 space-y-3">
+                            {(() => {
+                              const notFoundVisible = guUploadResult.notFound.filter(
+                                n => !(n.statusLain && n.statusLain.startsWith('Sudah Cair'))
+                              );
+                              return notFoundVisible.length > 0 && (
+                                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                                  <p className="font-bold text-red-700 mb-2">
+                                    ❌ Tidak ditemukan / tidak cocok ({notFoundVisible.length})
+                                  </p>
+                                  {(showAllNotFound ? notFoundVisible : notFoundVisible.slice(0, 10)).map((n, i) => {
+                                    const bisaDipindah = !!n.docIdLain && n.statusLain && n.statusLain !== 'DUPLIKAT_DI_FILE';
+                                    const bisaDilihat = !!n.docIdLain && n.statusLain === 'DUPLIKAT_DI_FILE';
+                                    return (
+                                      <div key={i} className="flex justify-between items-center py-1.5 border-b border-red-100 last:border-0 gap-2">
+                                        <span className="text-gray-700">
+                                          {n.sekolahRaw} — <span className="font-semibold">{formatRupiah(n.nominal)}</span>
+                                          {n.belanja && <span className="text-gray-400"> — {n.belanja}</span>}
+                                        </span>
+                                        <span className="flex items-center gap-2 flex-shrink-0">
+                                          {n.statusLain && <span className="text-red-500">({n.statusLain})</span>}
+                                          {bisaDipindah && (
+                                            <button onClick={() => verifikasiMassal([n], n.statusLain)} disabled={prosesVerifikasiMassal}
+                                              className="text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 px-2 py-1 rounded font-semibold whitespace-nowrap flex items-center gap-1 disabled:opacity-50 transition">
+                                              <IconPlusCircle size={13}/> Siap Cair
+                                            </button>
+                                          )}
+                                          {bisaDilihat && (
+                                            <button onClick={() => gotoNotFoundItem(n)} className="text-blue-600 font-semibold whitespace-nowrap">
+                                              Lihat →
+                                            </button>
+                                          )}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                  {notFoundVisible.length > 10 && (
+                                    <button onClick={() => setShowAllNotFound(v => !v)} className="text-red-600 underline mt-1">
+                                      {showAllNotFound ? 'Sembunyikan' : `Lihat semua (${notFoundVisible.length})`}
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
+                            {guUploadResult.ambiguous.length > 0 && (
+                              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                                <p className="font-bold text-yellow-700 mb-2">
+                                  ⚠️ Ambigu, lebih dari 1 opsi cocok ({guUploadResult.ambiguous.length})
+                                </p>
+                                {(showAllAmbiguous ? guUploadResult.ambiguous : guUploadResult.ambiguous.slice(0, 10)).map((a, i) => (
+                                  <button key={i} onClick={() => gotoAmbiguous(a)}
+                                    className="w-full flex justify-between items-center py-1.5 border-b border-yellow-100 last:border-0 text-gray-700 text-left hover:bg-yellow-100 rounded px-1 -mx-1 transition">
+                                    <span>{a.sekolahRaw} — <span className="font-semibold">{formatRupiah(a.nominal)}</span> <span className="text-yellow-600">({a.jumlahOpsi} opsi cocok)</span></span>
+                                    <span className="text-blue-600 font-semibold whitespace-nowrap flex-shrink-0">Lihat →</span>
+                                  </button>
+                                ))}
+                                {guUploadResult.ambiguous.length > 10 && (
+                                  <button onClick={() => setShowAllAmbiguous(v => !v)} className="text-yellow-700 underline mt-1">
+                                    {showAllAmbiguous ? 'Sembunyikan' : `Lihat semua (${guUploadResult.ambiguous.length})`}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
+                            {guUploadResult.belanjaBeda.length > 0 && (
+                              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                                <p className="font-bold text-orange-700 mb-2">
+                                  🔶 Cocok sekolah & nominal, tapi rincian belanja beda ({guUploadResult.belanjaBeda.length})
+                                </p>
+                                {guUploadResult.belanjaBeda.map((b, i) => (
+                                  <div key={i} className="py-1.5 border-b border-orange-100 last:border-0">
+                                    <div className="text-gray-800"><b>{b.spjId}</b> — {b.sekolahRaw} — {formatRupiah(b.nominal)}</div>
+                                    <div className="text-gray-500">File: {b.belanjaFile}</div>
+                                    <div className="text-gray-500">Sistem: {b.rincianSistem}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {guUploadResult.notFound.filter(n => !(n.statusLain && n.statusLain.startsWith('Sudah Cair'))).length === 0 && guUploadResult.ambiguous.length === 0 && guUploadResult.belanjaBeda.length === 0 && (
+                              <p className="text-teal-700 bg-white/60 rounded-lg p-3 border border-teal-100">
+                                ✅ Semua baris di file cocok dan sudah dicentang otomatis, tidak ada masalah.
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2300,7 +2431,7 @@ function extractRekening(kodeRaw) {
                                     const riwayatTerbuka = expandedRiwayatCair[spj.id] === true;
                                     return (
                                     <React.Fragment key={spj.id}>
-                                    <tr className="border-b border-gray-100 hover:bg-gray-50">
+                                    <tr id={`spj-row-${spj._docId}`} className={`border-b border-gray-100 transition-colors ${highlightDocId === spj._docId ? 'bg-yellow-200 ring-2 ring-yellow-400 ring-inset' : 'hover:bg-gray-50'}`}>
                                       <td className="p-3 font-medium text-gray-700">
                                         {spj.id}
                                         {adaRiwayat && (
