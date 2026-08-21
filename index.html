@@ -1710,9 +1710,9 @@ function extractRekening(kodeRaw) {
                 )}
                 {!rakLoading && rakData.length > 0 && (
                   <div className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
-                    <div className="overflow-x-auto">
+                    <div className="overflow-auto max-h-[70vh]">
                       <table className="w-full text-left border-collapse text-sm">
-                        <thead>
+                        <thead className="sticky top-0 z-10">
                           <tr style={{backgroundColor:'#16a34a'}} className="text-white">
                             <th className="p-3 font-semibold text-center w-10">No</th>
                             <th className="p-3 font-semibold">Sekolah</th>
@@ -1962,8 +1962,8 @@ function extractRekening(kodeRaw) {
 
             if (statusFilter === 'siapCair' && tercentangDiAtas) {
               dataSpjFiltered = [...dataSpjFiltered].sort((a, b) => {
-                const aCek = selectedForCair[a.id] ? 1 : 0;
-                const bCek = selectedForCair[b.id] ? 1 : 0;
+                const aCek = selectedForCair[a._docId] ? 1 : 0;
+                const bCek = selectedForCair[b._docId] ? 1 : 0;
                 return bCek - aCek;
               });
             }
@@ -2130,7 +2130,7 @@ function extractRekening(kodeRaw) {
                                   </p>
                                   {(showAllNotFound ? notFoundVisible : notFoundVisible.slice(0, 10)).map((n, i) => {
                                     const bisaDipindah = !!n.docIdLain && n.statusLain && n.statusLain !== 'DUPLIKAT_DI_FILE';
-                                    const bisaDilihat = !!n.docIdLain && n.statusLain === 'DUPLIKAT_DI_FILE';
+                                    const bisaDilihat = !!n.docIdLain;
                                     return (
                                       <div key={i} className="flex justify-between items-center py-1.5 border-b border-red-100 last:border-0 gap-2">
                                         <span className="text-gray-700">
