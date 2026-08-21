@@ -2432,7 +2432,7 @@ function extractRekening(kodeRaw) {
                                     return (
                                     <React.Fragment key={spj.id}>
                                     <tr id={`spj-row-${spj._docId}`} className={`border-b border-gray-100 transition-colors ${highlightDocId === spj._docId ? 'bg-yellow-200 ring-2 ring-yellow-400 ring-inset' : 'hover:bg-gray-50'}`}>
-                                      <td className="p-3 font-medium text-gray-700">
+                                      <td className="p-3 font-medium text-gray-700 relative">
                                         {spj.id}
                                         {adaRiwayat && (
                                           <button onClick={() => setExpandedRiwayatCair(prev => ({ ...prev, [spj.id]: !prev[spj.id] }))}
@@ -2440,6 +2440,19 @@ function extractRekening(kodeRaw) {
                                             <IconClock size={11}/> Riwayat
                                             <IconChevronDown size={11} className={`transition-transform ${riwayatTerbuka ? 'rotate-180' : ''}`}/>
                                           </button>
+                                        )}
+                                        {adaRiwayat && riwayatTerbuka && (
+                                          <div className="absolute z-20 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg p-2 space-y-1">
+                                            {spj.riwayatRevisi.map((r, i) => (
+                                              <div key={i} className={`text-xs rounded px-2 py-1 border flex items-start gap-1 ${r.selesai ? 'bg-green-50 border-green-200 opacity-70' : 'bg-orange-50 border-orange-200'}`}>
+                                                <span className="flex-shrink-0 mt-0.5">{r.selesai ? '✅' : r.status === 'Revisi' ? '🔴' : r.status === 'Ditunda' ? '🟠' : '🔵'}</span>
+                                                <div className="min-w-0">
+                                                  <span className={`font-bold ${r.selesai ? 'text-green-600 line-through' : r.status === 'Revisi' ? 'text-red-600' : r.status === 'Ditunda' ? 'text-orange-600' : 'text-blue-600'}`}>[{r.status} {r.tanggal}]</span>
+                                                  <span className={`ml-1 ${r.selesai ? 'text-green-500 line-through' : 'text-gray-600'}`}>{r.catatan || '(tanpa catatan)'}</span>
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
                                         )}
                                       </td>
                                       <td className="p-3">
